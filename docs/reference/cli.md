@@ -56,6 +56,7 @@ flow run <file> [options]
 | Option | Description |
 |---|---|
 | `--input <json>` | JSON string to use as the `request` object |
+| `--input-file <path>` | Read input from a file (.json, .csv, .xlsx, .xls) |
 | `--verbose` | Show detailed execution logs |
 | `--strict-env` | Fail if any referenced `env` variables are missing |
 | `--mock` | Use mock services instead of real connectors |
@@ -96,6 +97,55 @@ flow run hello.flow --input '{"username": "octocat", "limit": 10}'
 set user to request.username    # "octocat"
 set max to request.limit        # 10
 ```
+
+### Input from a file
+
+Instead of typing JSON on the command line, you can read input from a file using `--input-file`. This is often easier, especially for complex data or on Windows.
+
+**Supported formats:** `.json`, `.csv`, `.xlsx`, `.xls`
+
+```bash
+# From a JSON file
+flow run hello.flow --input-file data.json
+
+# From a CSV spreadsheet
+flow run process-orders.flow --input-file orders.csv
+
+# From an Excel spreadsheet
+flow run process-orders.flow --input-file orders.xlsx
+```
+
+**How spreadsheet data maps to input:**
+
+If your CSV or Excel file has **one data row**, it becomes a flat `request` object:
+
+| name | email | age |
+|---|---|---|
+| Alice | alice@example.com | 30 |
+
+```txt
+# In your workflow:
+set name to request.name      # "Alice"
+set email to request.email    # "alice@example.com"
+```
+
+If your file has **multiple rows**, they become a list you can loop through:
+
+| name | email | age |
+|---|---|---|
+| Alice | alice@example.com | 30 |
+| Bob | bob@example.com | 25 |
+
+```txt
+# In your workflow:
+log "Processing {request.count} records"
+for each person in request.rows:
+    log "{person.name} — {person.email}"
+```
+
+::: warning
+You cannot use `--input` and `--input-file` at the same time. Pick one.
+:::
 
 ## flow test
 

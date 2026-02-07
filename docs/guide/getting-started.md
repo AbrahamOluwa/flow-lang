@@ -112,6 +112,18 @@ Outputs:
 
 The `{"name": "Alice"}` you passed in becomes accessible as `request.name` inside the workflow.
 
+::: tip Prefer using a file for input
+Instead of typing JSON on the command line, you can put your data in a file and use `--input-file`. This works with `.json`, `.csv`, and even `.xlsx` (Excel) files:
+
+```bash
+flow run hello.flow --input-file data.json
+flow run hello.flow --input-file customers.csv
+flow run hello.flow --input-file report.xlsx
+```
+
+See [CLI Reference — Input from a file](/reference/cli#input-from-a-file) for details.
+:::
+
 ## Test with mock services
 
 If your workflow connects to external services (like APIs), you can test it without making real calls:

@@ -26,7 +26,7 @@
 | 13. Docs Site | Planned | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 407 (phases 1–10) | Target: ~419+ after phase 12**
+**Tests passing: 418 (phases 1–10 + input-file) | Target: ~430+ after phase 12**
 
 ## Decisions Log
 
@@ -58,6 +58,7 @@ Decisions made during implementation that weren't in the original brief:
 24. **`buildConnectors` extracted to runtime** — Shared function in `src/runtime/index.ts` used by both CLI and server, avoids duplication.
 25. **Server module separate from CLI** — `src/server/index.ts` exports `createApp()` (testable with supertest) and `startServer()` (used by CLI). `.flow` files pre-parsed at startup, only `execute()` runs per request.
 26. **Server routes by filename** — In directory mode, each `.flow` file becomes a POST route: `email-verification.flow` → `POST /email-verification`. Single-file mode uses `POST /`.
+27. **`--input-file` for file-based input** — `flow run` accepts `--input-file <path>` to read input from `.json`, `.csv`, `.xlsx`, or `.xls` files. Single-row spreadsheets become a flat record; multi-row become `{ rows: [...], count: N }`. Uses SheetJS (`xlsx` package). Cannot be combined with `--input`.
 
 ## What This Is
 
@@ -76,7 +77,7 @@ npm run build        # Compile TypeScript
 npm run test         # Run test suite (Vitest)
 npm run lint         # Lint the codebase
 flow check <file>    # Parse and analyze a .flow file
-flow run <file>      # Execute a .flow file (--input <json>, --verbose, --strict-env, --mock)
+flow run <file>      # Execute a .flow file (--input <json>, --input-file <path>, --verbose, --strict-env, --mock)
 flow test <file>     # Dry-run with mock services (--dry-run, --verbose)
 flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock)
 ```

@@ -12,6 +12,7 @@ import {
 } from "../runtime/index.js";
 import { startServer } from "../server/index.js";
 import { formatErrors } from "../errors/index.js";
+import { parseInputFile } from "./input-file.js";
 import type { FlowError, LogEntry } from "../types/index.js";
 import type { ServiceConnector } from "../runtime/index.js";
 
@@ -123,7 +124,7 @@ function checkCommand(filePath: string): void {
     console.log(chalk.green(`No errors found in ${filePath}`));
 }
 
-async function runCommand(filePath: string, options: { input?: string; verbose?: boolean; strictEnv?: boolean; mock?: boolean }): Promise<void> {
+async function runCommand(filePath: string, options: { input?: string; inputFile?: string; verbose?: boolean; strictEnv?: boolean; mock?: boolean }): Promise<void> {
     // Load .env file into process.env
     loadDotenv({ quiet: true });
 
@@ -135,13 +136,28 @@ async function runCommand(filePath: string, options: { input?: string; verbose?:
         return;
     }
 
-    // Parse input
+    // Parse input — from --input (JSON string) or --input-file (file path)
     let input: Record<string, unknown> = {};
+    if (options.input && options.inputFile) {
+        console.error(chalk.red("Error: Use either --input or --input-file, not both."));
+        process.exitCode = 1;
+        return;
+    }
     if (options.input) {
         try {
             input = JSON.parse(options.input) as Record<string, unknown>;
         } catch {
             console.error(chalk.red(`Error: Invalid JSON input: ${options.input}`));
+            process.exitCode = 1;
+            return;
+        }
+    }
+    if (options.inputFile) {
+        try {
+            input = parseInputFile(options.inputFile);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(chalk.red(`Error reading input file: ${message}`));
             process.exitCode = 1;
             return;
         }
@@ -252,6 +268,7 @@ program
     .command("run <file>")
     .description("Execute a .flow file")
     .option("--input <json>", "JSON string with input data for the workflow")
+    .option("--input-file <path>", "Read input from a file (.json, .csv, .xlsx, .xls)")
     .option("--verbose", "Show detailed execution log")
     .option("--strict-env", "Error on missing environment variables instead of using empty")
     .option("--mock", "Use mock services instead of real HTTP calls")
