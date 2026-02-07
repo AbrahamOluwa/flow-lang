@@ -779,11 +779,17 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
         }
 
         let service = "";
+        let path: Expression | null = null;
         const parameters: Parameter[] = [];
 
         if (match(TokenType.KEYWORD, "using")) {
             const serviceTok = current();
             service = advance().value;
+
+            // Optional "at" path: using Service at "/endpoint"
+            if (match(TokenType.KEYWORD, "at")) {
+                path = parseAtomExpression();
+            }
 
             // Optional "with" parameters: key expr [and key expr ...]
             // Or "to" target
@@ -819,7 +825,7 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
             match(TokenType.DEDENT);
         }
 
-        return { kind: "ServiceCall", verb, description, service, parameters, errorHandler, loc: location };
+        return { kind: "ServiceCall", verb, description, service, path, parameters, errorHandler, loc: location };
     }
 
     // --------------------------------------------------------

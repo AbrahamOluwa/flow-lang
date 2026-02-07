@@ -17,7 +17,7 @@
 | 5. Runtime + CLI | Complete | 115 | Environment, evaluator, executor, mock connectors, CLI (check/run/test) |
 | 6. Examples | Complete | 17 (integration) | Three .flow files + end-to-end integration tests |
 | 7. Secrets/Env | Complete | 10 | dotenv loading, `--strict-env` flag, verbose warnings |
-| 8. HTTP Connector | Planned | ~20 | Async refactor, real HTTP calls, `--mock` flag |
+| 8. HTTP Connector | Complete | 12 | Async refactor, verb inference, `at` keyword, real HTTP, `--mock` flag |
 | 9. AI Connector | Planned | ~15 | Claude/GPT integration via SDKs |
 | npm publish | Planned | — | Publish to npm registry |
 | 10. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
@@ -26,7 +26,7 @@
 | 13. Docs Site | Planned | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 361 (phases 1–7) | Target: ~423+ after phases 8–12**
+**Tests passing: 373 (phases 1–8) | Target: ~423+ after phases 9–12**
 
 ## Decisions Log
 
@@ -42,13 +42,16 @@ Decisions made during implementation that weren't in the original brief:
 8. **Dot-access roots are lenient** — expressions like `signup.email` or `order.items` are not flagged as undefined variables. They are treated as implicit trigger/service data, since Flow users access external data via dot notation.
 9. **Scope model: loops create child scopes, steps don't** — `for each` loop variables are scoped to the loop body (child scope), while `step` blocks are purely organizational and share the parent scope.
 10. **`env` is predefined** — the `env` identifier is always available in the global scope so `env.API_KEY` works without an explicit `set`.
-11. **Runtime is synchronous** — no async/await. Mock connectors are synchronous. Retry waits are skipped (no actual delays). **Will become async in Phase 8.**
+11. **Runtime is async** — `execute()` returns `Promise<ExecutionResult>`. All service connectors return `Promise<FlowValue>`. Expression evaluation stays synchronous. Retry waits are still skipped (no actual delays).
 12. **Complete/reject use throw signals** — `CompleteSignal` and `RejectSignal` are thrown to halt execution from any nesting depth, caught in the main `execute()` function.
 13. **Missing dot-access fields return FlowEmpty** — `user.missing_field` returns `FlowEmpty` rather than throwing, consistent with the "no nulls but has empty" design.
 14. **Math on text with `plus` means concatenation** — `"hello" plus " world"` produces `"hello world"`. Other math operators require numbers.
 15. **Multiple complete outputs use `and`** — `complete with status "ok" and message msg` separates key-value pairs with `and`.
 16. **`set` updates parent scope variables** — `set x to ...` inside a loop or child scope updates the nearest parent scope's `x` if it exists there, rather than creating a new local variable. This is the intuitive behavior for non-programmers writing accumulators.
 17. **Interpolation supports hyphens in identifiers** — `{order-id}` works inside strings, matching Flow's support for hyphenated identifiers in regular code.
+18. **Verb inference for HTTP methods** — The HTTP connector infers the HTTP method from the English verb: get/fetch/list→GET, create/send/submit→POST, update/modify→PUT, delete/remove→DELETE. Unknown verbs default to POST.
+19. **`at` keyword for URL paths** — Service calls support optional `at "/path"` between service name and `with` params: `get user using API at "/users/123" with status "active"`.
+20. **`--mock` flag on `flow run`** — Forces mock connectors instead of real HTTP calls, useful for development and testing.
 
 ## What This Is
 
@@ -67,7 +70,7 @@ npm run build        # Compile TypeScript
 npm run test         # Run test suite (Vitest)
 npm run lint         # Lint the codebase
 flow check <file>    # Parse and analyze a .flow file
-flow run <file>      # Execute a .flow file (--input <json>, --verbose)
+flow run <file>      # Execute a .flow file (--input <json>, --verbose, --strict-env, --mock)
 flow test <file>     # Dry-run with mock services (--dry-run, --verbose)
 ```
 
@@ -84,9 +87,9 @@ src/
   errors/         # Error formatting and suggestions
 tests/
   lexer/          # 100 tests
-  parser/         # 64 tests
+  parser/         # 67 tests
   analyzer/       # 41 tests
-  runtime/        # 115 tests
+  runtime/        # 134 tests
   errors/         # 14 tests
   integration/    # 17 tests — end-to-end .flow file tests
 examples/         # Three .flow files (email-verification, order-processing, loan-application)
@@ -97,10 +100,10 @@ examples/         # Three .flow files (email-verification, order-processing, loa
 ### ServiceConnector Interface
 ```typescript
 interface ServiceConnector {
-    call(verb: string, description: string, params: Map<string, FlowValue>): FlowValue;
+    call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue>;
 }
 ```
-All service interactions (API, AI, plugin, webhook) go through this interface. Phase 8 will make it async (`Promise<FlowValue>`).
+All service interactions (API, AI, plugin, webhook) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector` (for real execution).
 
 ### RuntimeOptions (extension point for connectors)
 ```typescript
@@ -163,7 +166,7 @@ Error in loan-application.flow, line 12:
 Three optional top-level blocks: `config:`, `services:`, `workflow:`
 
 ### 7 Constructs (no more)
-1. **Steps:** `<verb> <description> using <Service> [with <params>]`
+1. **Steps:** `<verb> <description> using <Service> [at <path>] [with <params>]`
 2. **Conditions:** `if <condition>:` / `otherwise if:` / `otherwise:`
 3. **AI Requests:** `ask <Agent> to <instruction>` with `save the result as`
 4. **Variables:** `set <name> to <value/expression>`

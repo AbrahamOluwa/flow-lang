@@ -198,7 +198,7 @@ export class Environment {
 // ============================================================
 
 export interface ServiceConnector {
-    call(verb: string, description: string, params: Map<string, FlowValue>): FlowValue;
+    call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue>;
 }
 
 export interface MockConnectorOptions {
@@ -213,7 +213,7 @@ export class MockAPIConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    call(verb: string, description: string, _params: Map<string, FlowValue>): FlowValue {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`Service call failed: ${verb} ${description} (mock failure)`);
@@ -233,7 +233,7 @@ export class MockAIConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    call(_verb: string, description: string, _params: Map<string, FlowValue>): FlowValue {
+    async call(_verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`AI service failed: ${description} (mock failure)`);
@@ -253,7 +253,7 @@ export class MockPluginConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    call(verb: string, description: string, _params: Map<string, FlowValue>): FlowValue {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`Plugin failed: ${verb} ${description} (mock failure)`);
@@ -273,7 +273,7 @@ export class MockWebhookConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    call(verb: string, description: string, _params: Map<string, FlowValue>): FlowValue {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`Webhook failed: ${verb} ${description} (mock failure)`);
@@ -291,6 +291,159 @@ export function createMockConnector(serviceType: string, options?: MockConnector
         case "plugin": return new MockPluginConnector(options);
         case "webhook": return new MockWebhookConnector(options);
         default: return new MockAPIConnector(options);
+    }
+}
+
+// ============================================================
+// Real Connectors
+// ============================================================
+
+// Verb-to-HTTP-method mapping
+const GET_VERBS = new Set(["get", "fetch", "retrieve", "check", "pull", "list", "find", "search"]);
+const POST_VERBS = new Set(["create", "send", "submit", "add", "post", "charge", "notify", "record", "verify"]);
+const PUT_VERBS = new Set(["update", "modify", "change", "edit"]);
+const DELETE_VERBS = new Set(["delete", "remove", "cancel"]);
+
+export function inferHTTPMethod(verb: string): string {
+    const lower = verb.toLowerCase();
+    if (GET_VERBS.has(lower)) return "GET";
+    if (POST_VERBS.has(lower)) return "POST";
+    if (PUT_VERBS.has(lower)) return "PUT";
+    if (DELETE_VERBS.has(lower)) return "DELETE";
+    return "POST"; // default
+}
+
+export class HTTPAPIConnector implements ServiceConnector {
+    private baseUrl: string;
+
+    constructor(baseUrl: string) {
+        this.baseUrl = baseUrl.replace(/\/$/, ""); // strip trailing slash
+    }
+
+    async call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue> {
+        const method = inferHTTPMethod(verb);
+        let url = this.baseUrl;
+
+        if (path) {
+            url += path.startsWith("/") ? path : "/" + path;
+        }
+
+        // Serialize params
+        const serialized: Record<string, unknown> = {};
+        for (const [k, v] of params) {
+            serialized[k] = flowValueToJson(v);
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
+        try {
+            let response: Response;
+
+            if (method === "GET" || method === "DELETE") {
+                // Params become query string
+                const queryParts: string[] = [];
+                for (const [k, v] of Object.entries(serialized)) {
+                    queryParts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+                }
+                if (queryParts.length > 0) {
+                    url += (url.includes("?") ? "&" : "?") + queryParts.join("&");
+                }
+                response = await fetch(url, {
+                    method,
+                    headers: { "Accept": "application/json" },
+                    signal: controller.signal,
+                });
+            } else {
+                // POST/PUT: params become JSON body
+                response = await fetch(url, {
+                    method,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                    body: JSON.stringify({
+                        verb,
+                        description,
+                        ...serialized,
+                    }),
+                    signal: controller.signal,
+                });
+            }
+
+            if (!response.ok) {
+                const body = await response.text().catch(() => "");
+                throw new Error(`Service returned error ${response.status}: ${body || response.statusText}`);
+            }
+
+            const contentType = response.headers.get("content-type") ?? "";
+            if (contentType.includes("application/json")) {
+                const data = await response.json() as unknown;
+                return jsonToFlowValue(data);
+            }
+
+            // Non-JSON response: return as text
+            const textBody = await response.text();
+            return text(textBody);
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") {
+                throw new Error(`Request to ${this.baseUrl} timed out after 30 seconds`);
+            }
+            throw err;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+}
+
+export class WebhookConnector implements ServiceConnector {
+    private url: string;
+
+    constructor(url: string) {
+        this.url = url;
+    }
+
+    async call(verb: string, description: string, params: Map<string, FlowValue>): Promise<FlowValue> {
+        const serialized: Record<string, unknown> = {};
+        for (const [k, v] of params) {
+            serialized[k] = flowValueToJson(v);
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
+        try {
+            const response = await fetch(this.url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ verb, description, ...serialized }),
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                const body = await response.text().catch(() => "");
+                throw new Error(`Webhook returned error ${response.status}: ${body || response.statusText}`);
+            }
+
+            return record({ status: text("ok") });
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") {
+                throw new Error(`Webhook at ${this.url} timed out after 30 seconds`);
+            }
+            throw err;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+}
+
+export class PluginStubConnector implements ServiceConnector {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
+        // Plugin connectors are not yet implemented — fall back to mock behavior
+        return record({
+            status: text("ok"),
+            data: text(`mock plugin response for: ${verb} ${description}`),
+        });
     }
 }
 
@@ -322,7 +475,7 @@ interface ExecutionContext {
 }
 
 // ============================================================
-// Expression evaluator
+// Expression evaluator (stays synchronous)
 // ============================================================
 
 function evaluateExpression(expr: Expression, ctx: ExecutionContext): FlowValue {
@@ -546,31 +699,31 @@ function evaluateLogical(expr: Expression & { kind: "LogicalExpression" }, ctx: 
 }
 
 // ============================================================
-// Statement executor
+// Statement executor (async — service calls return promises)
 // ============================================================
 
-function executeStatements(stmts: Statement[], ctx: ExecutionContext): void {
+async function executeStatements(stmts: Statement[], ctx: ExecutionContext): Promise<void> {
     for (const stmt of stmts) {
-        executeStatement(stmt, ctx);
+        await executeStatement(stmt, ctx);
     }
 }
 
-function executeStatement(stmt: Statement, ctx: ExecutionContext): void {
+async function executeStatement(stmt: Statement, ctx: ExecutionContext): Promise<void> {
     switch (stmt.kind) {
         case "SetStatement":
             executeSetStatement(stmt, ctx);
             break;
         case "IfStatement":
-            executeIfStatement(stmt, ctx);
+            await executeIfStatement(stmt, ctx);
             break;
         case "ForEachStatement":
-            executeForEachStatement(stmt, ctx);
+            await executeForEachStatement(stmt, ctx);
             break;
         case "ServiceCall":
-            executeServiceCall(stmt, ctx);
+            await executeServiceCall(stmt, ctx);
             break;
         case "AskStatement":
-            executeAskStatement(stmt, ctx);
+            await executeAskStatement(stmt, ctx);
             break;
         case "LogStatement":
             executeLogStatement(stmt, ctx);
@@ -582,7 +735,7 @@ function executeStatement(stmt: Statement, ctx: ExecutionContext): void {
             executeRejectStatement(stmt, ctx);
             break;
         case "StepBlock":
-            executeStepBlock(stmt, ctx);
+            await executeStepBlock(stmt, ctx);
             break;
     }
 }
@@ -592,27 +745,27 @@ function executeSetStatement(stmt: SetStatement, ctx: ExecutionContext): void {
     ctx.env.set(stmt.variable, value);
 }
 
-function executeIfStatement(stmt: IfStatement, ctx: ExecutionContext): void {
+async function executeIfStatement(stmt: IfStatement, ctx: ExecutionContext): Promise<void> {
     const condValue = evaluateExpression(stmt.condition, ctx);
     if (isTruthy(condValue)) {
-        executeStatements(stmt.body, ctx);
+        await executeStatements(stmt.body, ctx);
         return;
     }
 
     for (const oi of stmt.otherwiseIfs) {
         const oiValue = evaluateExpression(oi.condition, ctx);
         if (isTruthy(oiValue)) {
-            executeStatements(oi.body, ctx);
+            await executeStatements(oi.body, ctx);
             return;
         }
     }
 
     if (stmt.otherwise) {
-        executeStatements(stmt.otherwise, ctx);
+        await executeStatements(stmt.otherwise, ctx);
     }
 }
 
-function executeForEachStatement(stmt: ForEachStatement, ctx: ExecutionContext): void {
+async function executeForEachStatement(stmt: ForEachStatement, ctx: ExecutionContext): Promise<void> {
     const collection = evaluateExpression(stmt.collection, ctx);
     if (collection.type !== "list") {
         throw new RuntimeError(
@@ -625,11 +778,11 @@ function executeForEachStatement(stmt: ForEachStatement, ctx: ExecutionContext):
         const childEnv = ctx.env.createChild();
         childEnv.set(stmt.itemName, item);
         const childCtx: ExecutionContext = { ...ctx, env: childEnv };
-        executeStatements(stmt.body, childCtx);
+        await executeStatements(stmt.body, childCtx);
     }
 }
 
-function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): void {
+async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Promise<void> {
     const connector = ctx.connectors.get(stmt.service);
     if (!connector) {
         throw new RuntimeError(
@@ -644,10 +797,17 @@ function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): void {
         params.set(param.name, evaluateExpression(param.value, ctx));
     }
 
+    // Evaluate path if present
+    let path: string | undefined;
+    if (stmt.path) {
+        const pathValue = evaluateExpression(stmt.path, ctx);
+        path = toDisplay(pathValue);
+    }
+
     if (stmt.errorHandler) {
-        executeWithErrorHandler(
-            () => {
-                connector.call(stmt.verb, stmt.description, params);
+        await executeWithErrorHandler(
+            async () => {
+                await connector.call(stmt.verb, stmt.description, params, path);
                 addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
             },
             stmt.errorHandler,
@@ -657,7 +817,7 @@ function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): void {
         );
     } else {
         try {
-            connector.call(stmt.verb, stmt.description, params);
+            await connector.call(stmt.verb, stmt.description, params, path);
             addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -670,7 +830,7 @@ function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): void {
     }
 }
 
-function executeAskStatement(stmt: AskStatement, ctx: ExecutionContext): void {
+async function executeAskStatement(stmt: AskStatement, ctx: ExecutionContext): Promise<void> {
     const connector = ctx.connectors.get(stmt.agent);
     if (!connector) {
         throw new RuntimeError(
@@ -680,7 +840,7 @@ function executeAskStatement(stmt: AskStatement, ctx: ExecutionContext): void {
     }
 
     try {
-        const response = connector.call("ask", stmt.instruction, new Map());
+        const response = await connector.call("ask", stmt.instruction, new Map());
         addLogEntry(ctx, "ask " + stmt.agent, "success", { agent: stmt.agent, instruction: stmt.instruction });
 
         // Extract result and confidence from the response
@@ -729,11 +889,11 @@ function executeRejectStatement(stmt: RejectStatement, ctx: ExecutionContext): v
     throw new RejectSignal(toDisplay(value));
 }
 
-function executeStepBlock(stmt: StepBlock, ctx: ExecutionContext): void {
+async function executeStepBlock(stmt: StepBlock, ctx: ExecutionContext): Promise<void> {
     const prevStep = ctx.currentStep;
     ctx.currentStep = stmt.name;
     addLogEntry(ctx, `step "${stmt.name}" started`, "success", {});
-    executeStatements(stmt.body, ctx);
+    await executeStatements(stmt.body, ctx);
     addLogEntry(ctx, `step "${stmt.name}" completed`, "success", {});
     ctx.currentStep = prevStep;
 }
@@ -742,19 +902,19 @@ function executeStepBlock(stmt: StepBlock, ctx: ExecutionContext): void {
 // Error handling (retry logic)
 // ============================================================
 
-function executeWithErrorHandler(
-    action: () => void,
+async function executeWithErrorHandler(
+    action: () => Promise<void>,
     handler: ErrorHandler,
     ctx: ExecutionContext,
     loc: SourceLocation,
     details: Record<string, unknown>,
-): void {
+): Promise<void> {
     const maxAttempts = 1 + (handler.retryCount ?? 0);
     let lastError: unknown = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            action();
+            await action();
             return; // Success
         } catch (err) {
             lastError = err;
@@ -769,7 +929,7 @@ function executeWithErrorHandler(
     // All attempts failed
     if (handler.fallback) {
         addLogEntry(ctx, "executing fallback", "success", details);
-        executeStatements(handler.fallback, ctx);
+        await executeStatements(handler.fallback, ctx);
     } else {
         const message = lastError instanceof Error ? lastError.message : String(lastError);
         addLogEntry(ctx, "all retries failed", "failure", { ...details, error: message });
@@ -806,7 +966,7 @@ export interface RuntimeOptions {
     strictEnv?: boolean;
 }
 
-export function execute(program: Program, source: string, options?: RuntimeOptions): ExecutionResult {
+export async function execute(program: Program, source: string, options?: RuntimeOptions): Promise<ExecutionResult> {
     const fileName = "<input>";
     const log: LogEntry[] = [];
 
@@ -866,7 +1026,7 @@ export function execute(program: Program, source: string, options?: RuntimeOptio
 
     // Execute the workflow
     try {
-        executeStatements(program.workflow.body, ctx);
+        await executeStatements(program.workflow.body, ctx);
         // If we get here, no complete/reject was hit
         return {
             result: { status: "completed", outputs: {} },

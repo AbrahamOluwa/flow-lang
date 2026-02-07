@@ -132,6 +132,7 @@ export interface ServiceCall {
     verb: string;
     description: string;
     service: string;
+    path: Expression | null;
     parameters: Parameter[];
     errorHandler: ErrorHandler | null;
     loc: SourceLocation;

@@ -486,6 +486,7 @@ describe("Parser — service call", () => {
         expect(stmt.verb).toBe("verify");
         expect(stmt.description).toBe("email");
         expect(stmt.service).toBe("EmailVerifier");
+        expect(stmt.path).toBeNull();
     });
 
     it("parses service call with multi-word description", () => {
@@ -507,6 +508,32 @@ describe("Parser — service call", () => {
         const source = 'workflow:\n    create customer using Stripe with name signup.name and email signup.email';
         const stmt = firstStmt(source) as ServiceCall;
         expect(stmt.parameters).toHaveLength(2);
+    });
+
+    it("parses service call with 'at' path", () => {
+        const source = 'workflow:\n    get user using API at "/users/123"';
+        const stmt = firstStmt(source) as ServiceCall;
+        expect(stmt.kind).toBe("ServiceCall");
+        expect(stmt.verb).toBe("get");
+        expect(stmt.service).toBe("API");
+        expect(stmt.path).not.toBeNull();
+        expect(stmt.path!.kind).toBe("StringLiteral");
+    });
+
+    it("parses service call with 'at' path and 'with' parameters", () => {
+        const source = 'workflow:\n    create order using API at "/orders" with item "widget" and qty 3';
+        const stmt = firstStmt(source) as ServiceCall;
+        expect(stmt.path).not.toBeNull();
+        expect(stmt.parameters).toHaveLength(2);
+        expect(stmt.parameters[0]!.name).toBe("item");
+        expect(stmt.parameters[1]!.name).toBe("qty");
+    });
+
+    it("parses service call without 'at' has null path", () => {
+        const source = 'workflow:\n    fetch data using API with limit 10';
+        const stmt = firstStmt(source) as ServiceCall;
+        expect(stmt.path).toBeNull();
+        expect(stmt.parameters).toHaveLength(1);
     });
 });
 

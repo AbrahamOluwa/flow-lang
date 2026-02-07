@@ -29,10 +29,10 @@ function checkFile(source: string, fileName: string): void {
     expect(allErrors, `Errors in ${fileName}: ${allErrors.map(e => e.message).join("; ")}`).toHaveLength(0);
 }
 
-function runFile(source: string, input?: Record<string, unknown>): ExecutionResult {
+async function runFile(source: string, input?: Record<string, unknown>): Promise<ExecutionResult> {
     const tokens = tokenize(source);
     const { program } = parse(tokens, source);
-    return execute(program, source, { input });
+    return await execute(program, source, { input });
 }
 
 function logMessages(result: ExecutionResult): string[] {
@@ -52,8 +52,8 @@ describe("Integration — email-verification.flow", () => {
         checkFile(source, "email-verification.flow");
     });
 
-    it("completes successfully with valid email input", () => {
-        const result = runFile(source, {
+    it("completes successfully with valid email input", async () => {
+        const result = await runFile(source, {
             signup: { email: "alice@example.com" },
         });
         expect(result.result.status).toBe("completed");
@@ -63,8 +63,8 @@ describe("Integration — email-verification.flow", () => {
         }
     });
 
-    it("rejects when email is empty", () => {
-        const result = runFile(source, {
+    it("rejects when email is empty", async () => {
+        const result = await runFile(source, {
             signup: { email: "" },
         });
         expect(result.result.status).toBe("rejected");
@@ -73,8 +73,8 @@ describe("Integration — email-verification.flow", () => {
         }
     });
 
-    it("logs the verification step", () => {
-        const result = runFile(source, {
+    it("logs the verification step", async () => {
+        const result = await runFile(source, {
             signup: { email: "test@test.com" },
         });
         const msgs = logMessages(result);
@@ -93,8 +93,8 @@ describe("Integration — order-processing.flow", () => {
         checkFile(source, "order-processing.flow");
     });
 
-    it("processes an order successfully", () => {
-        const result = runFile(source, {
+    it("processes an order successfully", async () => {
+        const result = await runFile(source, {
             order: {
                 id: "ORD-789",
                 items: ["widget", "gadget", "doohickey"],
@@ -110,8 +110,8 @@ describe("Integration — order-processing.flow", () => {
         }
     });
 
-    it("counts items correctly in the loop", () => {
-        const result = runFile(source, {
+    it("counts items correctly in the loop", async () => {
+        const result = await runFile(source, {
             order: {
                 id: "ORD-001",
                 items: ["a", "b", "c", "d"],
@@ -122,16 +122,16 @@ describe("Integration — order-processing.flow", () => {
         expect(msgs).toContain("Checked 4 items");
     });
 
-    it("logs the order ID", () => {
-        const result = runFile(source, {
+    it("logs the order ID", async () => {
+        const result = await runFile(source, {
             order: { id: "ORD-555", items: ["x"], subtotal: 10 },
         });
         const msgs = logMessages(result);
         expect(msgs.some(m => m.includes("ORD-555"))).toBe(true);
     });
 
-    it("executes all four steps", () => {
-        const result = runFile(source, {
+    it("executes all four steps", async () => {
+        const result = await runFile(source, {
             order: { id: "ORD-1", items: ["item"], subtotal: 100 },
         });
         const stepStarts = result.log.filter(e => e.action.includes("started"));
@@ -154,8 +154,8 @@ describe("Integration — loan-application.flow", () => {
         checkFile(source, "loan-application.flow");
     });
 
-    it("approves a standard loan application", () => {
-        const result = runFile(source, {
+    it("approves a standard loan application", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "Jane Doe",
                 email: "jane@example.com",
@@ -171,8 +171,8 @@ describe("Integration — loan-application.flow", () => {
         }
     });
 
-    it("calculates correct rate for amount above 50000", () => {
-        const result = runFile(source, {
+    it("calculates correct rate for amount above 50000", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "John Smith",
                 email: "john@example.com",
@@ -187,8 +187,8 @@ describe("Integration — loan-application.flow", () => {
         }
     });
 
-    it("calculates correct rate for amount between 20000 and 50000", () => {
-        const result = runFile(source, {
+    it("calculates correct rate for amount between 20000 and 50000", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "Alice",
                 email: "alice@example.com",
@@ -203,8 +203,8 @@ describe("Integration — loan-application.flow", () => {
         }
     });
 
-    it("calculates monthly payment", () => {
-        const result = runFile(source, {
+    it("calculates monthly payment", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "Bob",
                 email: "bob@example.com",
@@ -220,8 +220,8 @@ describe("Integration — loan-application.flow", () => {
         }
     });
 
-    it("executes all six steps", () => {
-        const result = runFile(source, {
+    it("executes all six steps", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "Test",
                 email: "test@test.com",
@@ -239,8 +239,8 @@ describe("Integration — loan-application.flow", () => {
         expect(stepNames).toContain("RecordDecision");
     });
 
-    it("logs identity verification and credit report", () => {
-        const result = runFile(source, {
+    it("logs identity verification and credit report", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "Tester",
                 email: "t@t.com",
@@ -253,8 +253,8 @@ describe("Integration — loan-application.flow", () => {
         expect(msgs.some(m => m.includes("Credit report"))).toBe(true);
     });
 
-    it("logs risk assessment confidence", () => {
-        const result = runFile(source, {
+    it("logs risk assessment confidence", async () => {
+        const result = await runFile(source, {
             application: {
                 name: "Tester",
                 email: "t@t.com",

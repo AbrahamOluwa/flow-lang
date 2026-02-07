@@ -11,6 +11,8 @@ import {
     MockAPIConnector, MockAIConnector, MockPluginConnector, MockWebhookConnector,
     createMockConnector,
     RuntimeError,
+    inferHTTPMethod,
+    HTTPAPIConnector, WebhookConnector, PluginStubConnector,
 } from "../../src/runtime/index.js";
 import type { FlowValue, ExecutionResult } from "../../src/types/index.js";
 
@@ -18,14 +20,14 @@ import type { FlowValue, ExecutionResult } from "../../src/types/index.js";
 // Helpers
 // ============================================================
 
-function run(source: string, options?: Parameters<typeof execute>[2]): ExecutionResult {
+async function run(source: string, options?: Parameters<typeof execute>[2]): Promise<ExecutionResult> {
     const tokens = tokenize(source);
     const { program } = parse(tokens, source);
-    return execute(program, source, options);
+    return await execute(program, source, options);
 }
 
-function runOk(source: string, options?: Parameters<typeof execute>[2]): ExecutionResult {
-    const result = run(source, options);
+async function runOk(source: string, options?: Parameters<typeof execute>[2]): Promise<ExecutionResult> {
+    const result = await run(source, options);
     if (result.result.status === "error") {
         throw new Error(`Unexpected runtime error: ${result.result.error.message}`);
     }
@@ -209,38 +211,38 @@ describe("Environment", () => {
 // ============================================================
 
 describe("Mock connectors", () => {
-    it("MockAPIConnector returns a record", () => {
+    it("MockAPIConnector returns a record", async () => {
         const conn = new MockAPIConnector();
-        const result = conn.call("fetch", "data", new Map());
+        const result = await conn.call("fetch", "data", new Map());
         expect(result.type).toBe("record");
     });
 
-    it("MockAIConnector returns result and confidence", () => {
+    it("MockAIConnector returns result and confidence", async () => {
         const conn = new MockAIConnector();
-        const result = conn.call("ask", "analyze data", new Map());
+        const result = await conn.call("ask", "analyze data", new Map());
         expect(result.type).toBe("record");
         const rec = result as { type: "record"; value: Map<string, FlowValue> };
         expect(rec.value.get("result")?.type).toBe("text");
         expect(rec.value.get("confidence")?.type).toBe("number");
     });
 
-    it("MockPluginConnector returns a record", () => {
+    it("MockPluginConnector returns a record", async () => {
         const conn = new MockPluginConnector();
-        const result = conn.call("run", "task", new Map());
+        const result = await conn.call("run", "task", new Map());
         expect(result.type).toBe("record");
     });
 
-    it("MockWebhookConnector returns a record", () => {
+    it("MockWebhookConnector returns a record", async () => {
         const conn = new MockWebhookConnector();
-        const result = conn.call("notify", "webhook", new Map());
+        const result = await conn.call("notify", "webhook", new Map());
         expect(result.type).toBe("record");
     });
 
-    it("connector fails when failCount is set", () => {
+    it("connector fails when failCount is set", async () => {
         const conn = new MockAPIConnector({ failCount: 1 });
-        expect(() => conn.call("fetch", "data", new Map())).toThrow("mock failure");
+        await expect(conn.call("fetch", "data", new Map())).rejects.toThrow("mock failure");
         // Second call succeeds
-        const result = conn.call("fetch", "data", new Map());
+        const result = await conn.call("fetch", "data", new Map());
         expect(result.type).toBe("record");
     });
 
@@ -257,150 +259,150 @@ describe("Mock connectors", () => {
 // ============================================================
 
 describe("Runtime — expression evaluation", () => {
-    it("evaluates string literal", () => {
-        const result = runOk('workflow:\n    log "hello"');
+    it("evaluates string literal", async () => {
+        const result = await runOk('workflow:\n    log "hello"');
         expect(logMessages(result)).toEqual(["hello"]);
     });
 
-    it("evaluates number literal", () => {
-        const result = runOk("workflow:\n    log 42");
+    it("evaluates number literal", async () => {
+        const result = await runOk("workflow:\n    log 42");
         expect(logMessages(result)).toEqual(["42"]);
     });
 
-    it("evaluates boolean literal", () => {
-        const result = runOk("workflow:\n    log true");
+    it("evaluates boolean literal", async () => {
+        const result = await runOk("workflow:\n    log true");
         expect(logMessages(result)).toEqual(["true"]);
     });
 
-    it("evaluates variable reference", () => {
-        const result = runOk('workflow:\n    set x to 5\n    log x');
+    it("evaluates variable reference", async () => {
+        const result = await runOk('workflow:\n    set x to 5\n    log x');
         expect(logMessages(result)).toEqual(["5"]);
     });
 
-    it("evaluates dot access on input data", () => {
-        const result = runOk('workflow:\n    log user.name', {
+    it("evaluates dot access on input data", async () => {
+        const result = await runOk('workflow:\n    log user.name', {
             input: { user: { name: "Alice" } },
         });
         expect(logMessages(result)).toEqual(["Alice"]);
     });
 
-    it("evaluates deep dot access", () => {
-        const result = runOk('workflow:\n    log a.b.c', {
+    it("evaluates deep dot access", async () => {
+        const result = await runOk('workflow:\n    log a.b.c', {
             input: { a: { b: { c: "deep" } } },
         });
         expect(logMessages(result)).toEqual(["deep"]);
     });
 
-    it("dot access on missing field returns empty", () => {
-        const result = runOk('workflow:\n    log user.missing', {
+    it("dot access on missing field returns empty", async () => {
+        const result = await runOk('workflow:\n    log user.missing', {
             input: { user: { name: "Alice" } },
         });
         expect(logMessages(result)).toEqual(["(empty)"]);
     });
 
-    it("dot access on undefined root returns empty", () => {
-        const result = runOk('workflow:\n    log unknown.field');
+    it("dot access on undefined root returns empty", async () => {
+        const result = await runOk('workflow:\n    log unknown.field');
         expect(logMessages(result)).toEqual(["(empty)"]);
     });
 
-    it("evaluates interpolated string", () => {
-        const result = runOk('workflow:\n    set name to "World"\n    log "Hello, {name}!"');
+    it("evaluates interpolated string", async () => {
+        const result = await runOk('workflow:\n    set name to "World"\n    log "Hello, {name}!"');
         expect(logMessages(result)).toEqual(["Hello, World!"]);
     });
 
-    it("evaluates math: plus", () => {
-        const result = runOk("workflow:\n    set x to 3 plus 4\n    log x");
+    it("evaluates math: plus", async () => {
+        const result = await runOk("workflow:\n    set x to 3 plus 4\n    log x");
         expect(logMessages(result)).toEqual(["7"]);
     });
 
-    it("evaluates math: minus", () => {
-        const result = runOk("workflow:\n    set x to 10 minus 3\n    log x");
+    it("evaluates math: minus", async () => {
+        const result = await runOk("workflow:\n    set x to 10 minus 3\n    log x");
         expect(logMessages(result)).toEqual(["7"]);
     });
 
-    it("evaluates math: times", () => {
-        const result = runOk("workflow:\n    set x to 6 times 7\n    log x");
+    it("evaluates math: times", async () => {
+        const result = await runOk("workflow:\n    set x to 6 times 7\n    log x");
         expect(logMessages(result)).toEqual(["42"]);
     });
 
-    it("evaluates math: divided by", () => {
-        const result = runOk("workflow:\n    set x to 10 divided by 4\n    log x");
+    it("evaluates math: divided by", async () => {
+        const result = await runOk("workflow:\n    set x to 10 divided by 4\n    log x");
         expect(logMessages(result)).toEqual(["2.5"]);
     });
 
-    it("evaluates math: rounded to", () => {
-        const result = runOk("workflow:\n    set x to 3.14159 rounded to 2\n    log x");
+    it("evaluates math: rounded to", async () => {
+        const result = await runOk("workflow:\n    set x to 3.14159 rounded to 2\n    log x");
         expect(logMessages(result)).toEqual(["3.14"]);
     });
 
-    it("evaluates chained math", () => {
-        const result = runOk("workflow:\n    set x to 2 plus 3 times 4\n    log x");
+    it("evaluates chained math", async () => {
+        const result = await runOk("workflow:\n    set x to 2 plus 3 times 4\n    log x");
         // Left-to-right: (2+3)*4 = 20
         expect(logMessages(result)).toEqual(["20"]);
     });
 
-    it("division by zero produces runtime error", () => {
-        const result = run("workflow:\n    set x to 10 divided by 0");
+    it("division by zero produces runtime error", async () => {
+        const result = await run("workflow:\n    set x to 10 divided by 0");
         expect(result.result.status).toBe("error");
     });
 
-    it("evaluates comparison: is", () => {
-        const result = runOk('workflow:\n    set x to 5\n    if x is 5:\n        log "yes"');
+    it("evaluates comparison: is", async () => {
+        const result = await runOk('workflow:\n    set x to 5\n    if x is 5:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is not", () => {
-        const result = runOk('workflow:\n    set x to 5\n    if x is not 3:\n        log "yes"');
+    it("evaluates comparison: is not", async () => {
+        const result = await runOk('workflow:\n    set x to 5\n    if x is not 3:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is above", () => {
-        const result = runOk('workflow:\n    set x to 10\n    if x is above 5:\n        log "yes"');
+    it("evaluates comparison: is above", async () => {
+        const result = await runOk('workflow:\n    set x to 10\n    if x is above 5:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is below", () => {
-        const result = runOk('workflow:\n    set x to 3\n    if x is below 5:\n        log "yes"');
+    it("evaluates comparison: is below", async () => {
+        const result = await runOk('workflow:\n    set x to 3\n    if x is below 5:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is at least", () => {
-        const result = runOk('workflow:\n    set x to 5\n    if x is at least 5:\n        log "yes"');
+    it("evaluates comparison: is at least", async () => {
+        const result = await runOk('workflow:\n    set x to 5\n    if x is at least 5:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is at most", () => {
-        const result = runOk('workflow:\n    set x to 5\n    if x is at most 5:\n        log "yes"');
+    it("evaluates comparison: is at most", async () => {
+        const result = await runOk('workflow:\n    set x to 5\n    if x is at most 5:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is empty", () => {
-        const result = runOk('workflow:\n    set x to ""\n    if x is empty:\n        log "yes"');
+    it("evaluates comparison: is empty", async () => {
+        const result = await runOk('workflow:\n    set x to ""\n    if x is empty:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: is not empty", () => {
-        const result = runOk('workflow:\n    set x to "hello"\n    if x is not empty:\n        log "yes"');
+    it("evaluates comparison: is not empty", async () => {
+        const result = await runOk('workflow:\n    set x to "hello"\n    if x is not empty:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates comparison: contains (text)", () => {
-        const result = runOk('workflow:\n    set x to "hello world"\n    if x contains "world":\n        log "yes"');
+    it("evaluates comparison: contains (text)", async () => {
+        const result = await runOk('workflow:\n    set x to "hello world"\n    if x contains "world":\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates logical: and", () => {
-        const result = runOk('workflow:\n    set a to true\n    set b to true\n    if a and b:\n        log "yes"');
+    it("evaluates logical: and", async () => {
+        const result = await runOk('workflow:\n    set a to true\n    set b to true\n    if a and b:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates logical: or", () => {
-        const result = runOk('workflow:\n    set a to false\n    set b to true\n    if a or b:\n        log "yes"');
+    it("evaluates logical: or", async () => {
+        const result = await runOk('workflow:\n    set a to false\n    set b to true\n    if a or b:\n        log "yes"');
         expect(logMessages(result)).toEqual(["yes"]);
     });
 
-    it("evaluates env variable access", () => {
-        const result = runOk('workflow:\n    log env.API_KEY', {
+    it("evaluates env variable access", async () => {
+        const result = await runOk('workflow:\n    log env.API_KEY', {
             envVars: { API_KEY: "secret123" },
         });
         expect(logMessages(result)).toEqual(["secret123"]);
@@ -412,15 +414,15 @@ describe("Runtime — expression evaluation", () => {
 // ============================================================
 
 describe("Runtime — environment variables", () => {
-    it("returns FlowEmpty for missing env var in default mode", () => {
-        const result = runOk('workflow:\n    if env.MISSING is empty:\n        log "empty"', {
+    it("returns FlowEmpty for missing env var in default mode", async () => {
+        const result = await runOk('workflow:\n    if env.MISSING is empty:\n        log "empty"', {
             envVars: {},
         });
         expect(logMessages(result)).toEqual(["empty"]);
     });
 
-    it("throws RuntimeError for missing env var in strict mode", () => {
-        const result = run('workflow:\n    log env.MISSING', {
+    it("throws RuntimeError for missing env var in strict mode", async () => {
+        const result = await run('workflow:\n    log env.MISSING', {
             envVars: {},
             strictEnv: true,
         });
@@ -431,47 +433,47 @@ describe("Runtime — environment variables", () => {
         }
     });
 
-    it("does not throw for existing env var in strict mode", () => {
-        const result = runOk('workflow:\n    log env.API_KEY', {
+    it("does not throw for existing env var in strict mode", async () => {
+        const result = await runOk('workflow:\n    log env.API_KEY', {
             envVars: { API_KEY: "my-key" },
             strictEnv: true,
         });
         expect(logMessages(result)).toEqual(["my-key"]);
     });
 
-    it("accesses multiple env vars in one workflow", () => {
-        const result = runOk(
+    it("accesses multiple env vars in one workflow", async () => {
+        const result = await runOk(
             'workflow:\n    log env.KEY_A\n    log env.KEY_B\n    log env.KEY_C',
             { envVars: { KEY_A: "alpha", KEY_B: "bravo", KEY_C: "charlie" } },
         );
         expect(logMessages(result)).toEqual(["alpha", "bravo", "charlie"]);
     });
 
-    it("uses env vars in string interpolation", () => {
-        const result = runOk('workflow:\n    log "key is {env.API_KEY}"', {
+    it("uses env vars in string interpolation", async () => {
+        const result = await runOk('workflow:\n    log "key is {env.API_KEY}"', {
             envVars: { API_KEY: "abc123" },
         });
         expect(logMessages(result)).toEqual(["key is abc123"]);
     });
 
-    it("uses env vars in conditions", () => {
-        const result = runOk(
+    it("uses env vars in conditions", async () => {
+        const result = await runOk(
             'workflow:\n    if env.MODE is "production":\n        log "prod"\n    otherwise:\n        log "dev"',
             { envVars: { MODE: "production" } },
         );
         expect(logMessages(result)).toEqual(["prod"]);
     });
 
-    it("env vars do not override input data", () => {
-        const result = runOk(
+    it("env vars do not override input data", async () => {
+        const result = await runOk(
             'workflow:\n    log order.name\n    log env.NAME',
             { input: { order: { name: "from-input" } }, envVars: { NAME: "from-env" } },
         );
         expect(logMessages(result)).toEqual(["from-input", "from-env"]);
     });
 
-    it("logs warning for missing env var in verbose mode", () => {
-        const result = runOk('workflow:\n    log env.MISSING', {
+    it("logs warning for missing env var in verbose mode", async () => {
+        const result = await runOk('workflow:\n    log env.MISSING', {
             envVars: {},
             verbose: true,
         });
@@ -480,8 +482,8 @@ describe("Runtime — environment variables", () => {
         expect(warnings[0].details["message"]).toContain("MISSING");
     });
 
-    it("does not log warning for existing env var in verbose mode", () => {
-        const result = runOk('workflow:\n    log env.EXISTS', {
+    it("does not log warning for existing env var in verbose mode", async () => {
+        const result = await runOk('workflow:\n    log env.EXISTS', {
             envVars: { EXISTS: "yes" },
             verbose: true,
         });
@@ -489,8 +491,8 @@ describe("Runtime — environment variables", () => {
         expect(warnings.length).toBe(0);
     });
 
-    it("does not log warning in non-verbose mode", () => {
-        const result = runOk('workflow:\n    log env.MISSING', {
+    it("does not log warning in non-verbose mode", async () => {
+        const result = await runOk('workflow:\n    log env.MISSING', {
             envVars: {},
             verbose: false,
         });
@@ -504,20 +506,20 @@ describe("Runtime — environment variables", () => {
 // ============================================================
 
 describe("Runtime — set statement", () => {
-    it("sets and reads a variable", () => {
-        const result = runOk('workflow:\n    set greeting to "hi"\n    log greeting');
+    it("sets and reads a variable", async () => {
+        const result = await runOk('workflow:\n    set greeting to "hi"\n    log greeting');
         expect(logMessages(result)).toEqual(["hi"]);
     });
 
-    it("overwrites a variable", () => {
-        const result = runOk("workflow:\n    set x to 1\n    set x to 2\n    log x");
+    it("overwrites a variable", async () => {
+        const result = await runOk("workflow:\n    set x to 1\n    set x to 2\n    log x");
         expect(logMessages(result)).toEqual(["2"]);
     });
 });
 
 describe("Runtime — if statement", () => {
-    it("takes the true branch", () => {
-        const result = runOk([
+    it("takes the true branch", async () => {
+        const result = await runOk([
             "workflow:",
             "    set x to 10",
             '    if x is above 5:',
@@ -528,8 +530,8 @@ describe("Runtime — if statement", () => {
         expect(logMessages(result)).toEqual(["high"]);
     });
 
-    it("takes the otherwise branch", () => {
-        const result = runOk([
+    it("takes the otherwise branch", async () => {
+        const result = await runOk([
             "workflow:",
             "    set x to 2",
             '    if x is above 5:',
@@ -540,8 +542,8 @@ describe("Runtime — if statement", () => {
         expect(logMessages(result)).toEqual(["low"]);
     });
 
-    it("evaluates otherwise-if chain", () => {
-        const result = runOk([
+    it("evaluates otherwise-if chain", async () => {
+        const result = await runOk([
             "workflow:",
             "    set x to 5",
             '    if x is above 10:',
@@ -554,8 +556,8 @@ describe("Runtime — if statement", () => {
         expect(logMessages(result)).toEqual(["medium"]);
     });
 
-    it("skips all branches when none match", () => {
-        const result = runOk([
+    it("skips all branches when none match", async () => {
+        const result = await runOk([
             "workflow:",
             "    set x to 1",
             '    if x is above 5:',
@@ -566,8 +568,8 @@ describe("Runtime — if statement", () => {
 });
 
 describe("Runtime — for each statement", () => {
-    it("iterates over a list from input", () => {
-        const result = runOk([
+    it("iterates over a list from input", async () => {
+        const result = await runOk([
             "workflow:",
             "    set items to data.items",
             "    for each item in items:",
@@ -578,10 +580,10 @@ describe("Runtime — for each statement", () => {
         expect(logMessages(result)).toEqual(["apple", "banana", "cherry"]);
     });
 
-    it("loop variable is scoped to body", () => {
+    it("loop variable is scoped to body", async () => {
         // After the loop, the variable shouldn't be accessible.
         // This would be a runtime error if we try to access it.
-        const result = runOk([
+        const result = await runOk([
             "workflow:",
             "    set items to data.list",
             "    for each item in items:",
@@ -592,8 +594,8 @@ describe("Runtime — for each statement", () => {
         expect(logMessages(result)).toEqual(["inside", "inside"]);
     });
 
-    it("empty list produces no iterations", () => {
-        const result = runOk([
+    it("empty list produces no iterations", async () => {
+        const result = await runOk([
             "workflow:",
             "    set items to data.list",
             "    for each item in items:",
@@ -604,8 +606,8 @@ describe("Runtime — for each statement", () => {
         expect(logMessages(result)).toEqual([]);
     });
 
-    it("runtime error for non-list collection", () => {
-        const result = run([
+    it("runtime error for non-list collection", async () => {
+        const result = await run([
             "workflow:",
             '    set items to "not a list"',
             "    for each item in items:",
@@ -616,20 +618,20 @@ describe("Runtime — for each statement", () => {
 });
 
 describe("Runtime — service call", () => {
-    it("calls a declared service", () => {
+    it("calls a declared service", async () => {
         const source = [
             "services:",
             '    S is an API at "https://api.example.com"',
             "workflow:",
             "    fetch data using S",
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         const serviceLog = result.log.find(e => e.details["service"] === "S");
         expect(serviceLog).toBeDefined();
         expect(serviceLog!.result).toBe("success");
     });
 
-    it("passes parameters to service call", () => {
+    it("passes parameters to service call", async () => {
         const source = [
             "services:",
             '    S is an API at "https://api.example.com"',
@@ -637,13 +639,13 @@ describe("Runtime — service call", () => {
             '    set email to "test@example.com"',
             "    verify email using S with payload email",
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(result.result.status).toBe("completed");
     });
 });
 
 describe("Runtime — ask statement", () => {
-    it("calls an AI agent and saves result", () => {
+    it("calls an AI agent and saves result", async () => {
         const source = [
             "services:",
             '    Bot is an AI using "anthropic/claude-sonnet-4-20250514"',
@@ -652,13 +654,13 @@ describe("Runtime — ask statement", () => {
             "        save the result as analysis",
             "    log analysis",
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         const msgs = logMessages(result);
         expect(msgs).toHaveLength(1);
         expect(msgs[0]).toContain("mock AI response");
     });
 
-    it("saves confidence variable", () => {
+    it("saves confidence variable", async () => {
         const source = [
             "services:",
             '    Bot is an AI using "model"',
@@ -668,7 +670,7 @@ describe("Runtime — ask statement", () => {
             "        save the confidence as conf",
             "    log conf",
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         const msgs = logMessages(result);
         expect(msgs).toHaveLength(1);
         expect(msgs[0]).toBe("0.85");
@@ -676,38 +678,38 @@ describe("Runtime — ask statement", () => {
 });
 
 describe("Runtime — log statement", () => {
-    it("logs a string", () => {
-        const result = runOk('workflow:\n    log "hello"');
+    it("logs a string", async () => {
+        const result = await runOk('workflow:\n    log "hello"');
         expect(logMessages(result)).toEqual(["hello"]);
     });
 
-    it("logs a number", () => {
-        const result = runOk("workflow:\n    log 42");
+    it("logs a number", async () => {
+        const result = await runOk("workflow:\n    log 42");
         expect(logMessages(result)).toEqual(["42"]);
     });
 
-    it("logs an interpolated string", () => {
-        const result = runOk('workflow:\n    set x to 5\n    log "x is {x}"');
+    it("logs an interpolated string", async () => {
+        const result = await runOk('workflow:\n    set x to 5\n    log "x is {x}"');
         expect(logMessages(result)).toEqual(["x is 5"]);
     });
 });
 
 describe("Runtime — complete statement", () => {
-    it("completes with outputs", () => {
-        const result = runOk('workflow:\n    complete with status "done"');
+    it("completes with outputs", async () => {
+        const result = await runOk('workflow:\n    complete with status "done"');
         expect(result.result.status).toBe("completed");
         if (result.result.status === "completed") {
             expect(result.result.outputs["status"]).toEqual(text("done"));
         }
     });
 
-    it("completes with multiple outputs", () => {
+    it("completes with multiple outputs", async () => {
         const source = [
             "workflow:",
             '    set msg to "hello"',
             '    complete with status "ok" and message msg',
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(result.result.status).toBe("completed");
         if (result.result.status === "completed") {
             expect(result.result.outputs["status"]).toEqual(text("ok"));
@@ -715,8 +717,8 @@ describe("Runtime — complete statement", () => {
         }
     });
 
-    it("stops execution after complete", () => {
-        const result = runOk([
+    it("stops execution after complete", async () => {
+        const result = await runOk([
             "workflow:",
             '    complete with status "early"',
             '    log "should not run"',
@@ -727,16 +729,16 @@ describe("Runtime — complete statement", () => {
 });
 
 describe("Runtime — reject statement", () => {
-    it("rejects with a message", () => {
-        const result = runOk('workflow:\n    reject with "something went wrong"');
+    it("rejects with a message", async () => {
+        const result = await runOk('workflow:\n    reject with "something went wrong"');
         expect(result.result.status).toBe("rejected");
         if (result.result.status === "rejected") {
             expect(result.result.message).toBe("something went wrong");
         }
     });
 
-    it("stops execution after reject", () => {
-        const result = runOk([
+    it("stops execution after reject", async () => {
+        const result = await runOk([
             "workflow:",
             '    reject with "bad"',
             '    log "should not run"',
@@ -747,7 +749,7 @@ describe("Runtime — reject statement", () => {
 });
 
 describe("Runtime — step blocks", () => {
-    it("executes statements inside a step", () => {
+    it("executes statements inside a step", async () => {
         const source = [
             "workflow:",
             "    step Validate:",
@@ -755,24 +757,24 @@ describe("Runtime — step blocks", () => {
             "    step Process:",
             '        log "processing"',
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(logMessages(result)).toEqual(["validating", "processing"]);
     });
 
-    it("logs step start and end", () => {
+    it("logs step start and end", async () => {
         const source = [
             "workflow:",
             "    step MyStep:",
             '        log "inside"',
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         const stepLogs = result.log.filter(e => e.action.includes("MyStep"));
         expect(stepLogs).toHaveLength(2);
         expect(stepLogs[0]!.action).toContain("started");
         expect(stepLogs[1]!.action).toContain("completed");
     });
 
-    it("step shares parent scope", () => {
+    it("step shares parent scope", async () => {
         const source = [
             "workflow:",
             "    set x to 5",
@@ -781,7 +783,7 @@ describe("Runtime — step blocks", () => {
             "        set y to 10",
             "    log y",
         ].join("\n");
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(logMessages(result)).toEqual(["5", "10"]);
     });
 });
@@ -791,7 +793,7 @@ describe("Runtime — step blocks", () => {
 // ============================================================
 
 describe("Runtime — error handling", () => {
-    it("retries on failure then succeeds", () => {
+    it("retries on failure then succeeds", async () => {
         const connectors = new Map();
         connectors.set("S", new MockAPIConnector({ failCount: 2 }));
         const source = [
@@ -802,14 +804,14 @@ describe("Runtime — error handling", () => {
             "        on failure:",
             "            retry 3 times waiting 1 seconds",
         ].join("\n");
-        const result = runOk(source, { connectors });
+        const result = await runOk(source, { connectors });
         expect(result.result.status).toBe("completed");
         // Should have retry log entries
         const retryLogs = result.log.filter(e => e.action.startsWith("retry"));
         expect(retryLogs).toHaveLength(2);
     });
 
-    it("executes fallback when all retries fail", () => {
+    it("executes fallback when all retries fail", async () => {
         const connectors = new Map();
         connectors.set("S", new MockAPIConnector({ failCount: 100 }));
         const source = [
@@ -822,11 +824,11 @@ describe("Runtime — error handling", () => {
             "            if still failing:",
             '                log "fallback executed"',
         ].join("\n");
-        const result = runOk(source, { connectors });
+        const result = await runOk(source, { connectors });
         expect(logMessages(result)).toEqual(["fallback executed"]);
     });
 
-    it("runtime error when retries exhausted and no fallback", () => {
+    it("runtime error when retries exhausted and no fallback", async () => {
         const connectors = new Map();
         connectors.set("S", new MockAPIConnector({ failCount: 100 }));
         const source = [
@@ -837,11 +839,11 @@ describe("Runtime — error handling", () => {
             "        on failure:",
             "            retry 1 times waiting 1 seconds",
         ].join("\n");
-        const result = run(source, { connectors });
+        const result = await run(source, { connectors });
         expect(result.result.status).toBe("error");
     });
 
-    it("service call without error handler produces runtime error on failure", () => {
+    it("service call without error handler produces runtime error on failure", async () => {
         const connectors = new Map();
         connectors.set("S", new MockAPIConnector({ failCount: 1 }));
         const source = [
@@ -850,7 +852,7 @@ describe("Runtime — error handling", () => {
             "workflow:",
             "    send email using S",
         ].join("\n");
-        const result = run(source, { connectors });
+        const result = await run(source, { connectors });
         expect(result.result.status).toBe("error");
     });
 });
@@ -860,7 +862,7 @@ describe("Runtime — error handling", () => {
 // ============================================================
 
 describe("Runtime — full workflow", () => {
-    it("executes a complete workflow", () => {
+    it("executes a complete workflow", async () => {
         const source = [
             "config:",
             '    name: "Test Workflow"',
@@ -881,7 +883,7 @@ describe("Runtime — full workflow", () => {
             '    complete with status "done"',
         ].join("\n");
 
-        const result = runOk(source, {
+        const result = await runOk(source, {
             input: { signup: { email: "test@example.com" } },
         });
 
@@ -892,22 +894,22 @@ describe("Runtime — full workflow", () => {
         expect(logMessages(result)).toEqual(["reviewed"]);
     });
 
-    it("handles workflow with no statements", () => {
-        const result = runOk("workflow:\n    trigger: when a form is submitted");
+    it("handles workflow with no statements", async () => {
+        const result = await runOk("workflow:\n    trigger: when a form is submitted");
         expect(result.result.status).toBe("completed");
     });
 
-    it("handles empty program", () => {
-        const result = runOk("");
+    it("handles empty program", async () => {
+        const result = await runOk("");
         expect(result.result.status).toBe("completed");
     });
 
-    it("handles program with only config", () => {
-        const result = runOk('config:\n    name: "Test"');
+    it("handles program with only config", async () => {
+        const result = await runOk('config:\n    name: "Test"');
         expect(result.result.status).toBe("completed");
     });
 
-    it("workflow with for-each and conditions", () => {
+    it("workflow with for-each and conditions", async () => {
         const source = [
             "workflow:",
             "    set items to data.items",
@@ -918,14 +920,14 @@ describe("Runtime — full workflow", () => {
             '            log "small"',
         ].join("\n");
 
-        const result = runOk(source, {
+        const result = await runOk(source, {
             input: { data: { items: [3, 7, 1, 10] } },
         });
 
         expect(logMessages(result)).toEqual(["small", "big", "small", "big"]);
     });
 
-    it("workflow with nested steps and conditions", () => {
+    it("workflow with nested steps and conditions", async () => {
         const source = [
             "services:",
             '    S is an API at "url"',
@@ -939,11 +941,11 @@ describe("Runtime — full workflow", () => {
             '        log "processed"',
         ].join("\n");
 
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(logMessages(result)).toEqual(["valid", "processed"]);
     });
 
-    it("handles variables defined in if branches", () => {
+    it("handles variables defined in if branches", async () => {
         const source = [
             "workflow:",
             "    set x to 10",
@@ -954,11 +956,11 @@ describe("Runtime — full workflow", () => {
             "    log label",
         ].join("\n");
 
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(logMessages(result)).toEqual(["high"]);
     });
 
-    it("string concatenation with plus", () => {
+    it("string concatenation with plus", async () => {
         const source = [
             "workflow:",
             '    set a to "hello"',
@@ -967,7 +969,7 @@ describe("Runtime — full workflow", () => {
             "    log c",
         ].join("\n");
 
-        const result = runOk(source);
+        const result = await runOk(source);
         expect(logMessages(result)).toEqual(["hello world"]);
     });
 });
@@ -977,27 +979,123 @@ describe("Runtime — full workflow", () => {
 // ============================================================
 
 describe("Runtime — error messages", () => {
-    it("produces friendly error for undefined variable", () => {
-        const result = run("workflow:\n    log unknown_var");
+    it("produces friendly error for undefined variable", async () => {
+        const result = await run("workflow:\n    log unknown_var");
         expect(result.result.status).toBe("error");
         if (result.result.status === "error") {
             expect(result.result.error.message).toContain("unknown_var");
         }
     });
 
-    it("produces friendly error for dot access on non-record", () => {
-        const result = run('workflow:\n    set x to "hello"\n    log x.field');
+    it("produces friendly error for dot access on non-record", async () => {
+        const result = await run('workflow:\n    set x to "hello"\n    log x.field');
         expect(result.result.status).toBe("error");
         if (result.result.status === "error") {
             expect(result.result.error.message).toContain("field");
         }
     });
 
-    it("produces friendly error for numeric comparison on text", () => {
-        const result = run('workflow:\n    set x to "hello"\n    if x is above 5:\n        log "yes"');
+    it("produces friendly error for numeric comparison on text", async () => {
+        const result = await run('workflow:\n    set x to "hello"\n    if x is above 5:\n        log "yes"');
         expect(result.result.status).toBe("error");
         if (result.result.status === "error") {
             expect(result.result.error.message).toContain("number");
         }
+    });
+});
+
+// ============================================================
+// HTTP method inference
+// ============================================================
+
+describe("inferHTTPMethod", () => {
+    it("maps get verbs to GET", () => {
+        expect(inferHTTPMethod("get")).toBe("GET");
+        expect(inferHTTPMethod("fetch")).toBe("GET");
+        expect(inferHTTPMethod("retrieve")).toBe("GET");
+        expect(inferHTTPMethod("check")).toBe("GET");
+        expect(inferHTTPMethod("list")).toBe("GET");
+        expect(inferHTTPMethod("find")).toBe("GET");
+        expect(inferHTTPMethod("search")).toBe("GET");
+    });
+
+    it("maps create verbs to POST", () => {
+        expect(inferHTTPMethod("create")).toBe("POST");
+        expect(inferHTTPMethod("send")).toBe("POST");
+        expect(inferHTTPMethod("submit")).toBe("POST");
+        expect(inferHTTPMethod("add")).toBe("POST");
+        expect(inferHTTPMethod("post")).toBe("POST");
+        expect(inferHTTPMethod("charge")).toBe("POST");
+        expect(inferHTTPMethod("notify")).toBe("POST");
+        expect(inferHTTPMethod("verify")).toBe("POST");
+    });
+
+    it("maps update verbs to PUT", () => {
+        expect(inferHTTPMethod("update")).toBe("PUT");
+        expect(inferHTTPMethod("modify")).toBe("PUT");
+        expect(inferHTTPMethod("change")).toBe("PUT");
+        expect(inferHTTPMethod("edit")).toBe("PUT");
+    });
+
+    it("maps delete verbs to DELETE", () => {
+        expect(inferHTTPMethod("delete")).toBe("DELETE");
+        expect(inferHTTPMethod("remove")).toBe("DELETE");
+        expect(inferHTTPMethod("cancel")).toBe("DELETE");
+    });
+
+    it("defaults unknown verbs to POST", () => {
+        expect(inferHTTPMethod("process")).toBe("POST");
+        expect(inferHTTPMethod("analyze")).toBe("POST");
+        expect(inferHTTPMethod("run")).toBe("POST");
+    });
+
+    it("is case-insensitive", () => {
+        expect(inferHTTPMethod("GET")).toBe("GET");
+        expect(inferHTTPMethod("Create")).toBe("POST");
+        expect(inferHTTPMethod("DELETE")).toBe("DELETE");
+    });
+});
+
+// ============================================================
+// Real connectors (unit tests with mocked fetch)
+// ============================================================
+
+describe("PluginStubConnector", () => {
+    it("returns a mock response", async () => {
+        const conn = new PluginStubConnector();
+        const result = await conn.call("run", "task", new Map());
+        expect(result.type).toBe("record");
+        if (result.type === "record") {
+            expect(result.value.get("status")).toEqual(text("ok"));
+        }
+    });
+});
+
+// ============================================================
+// Service call with at keyword
+// ============================================================
+
+describe("Runtime — service call with at keyword", () => {
+    it("passes path to connector from at expression", async () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://api.example.com"',
+            "workflow:",
+            '    get user using API at "/users/123"',
+        ].join("\n");
+        const result = await runOk(source);
+        expect(result.result.status).toBe("completed");
+    });
+
+    it("uses interpolated path with at keyword", async () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://api.example.com"',
+            "workflow:",
+            '    set user-id to "456"',
+            '    get user using API at "/users/{user-id}"',
+        ].join("\n");
+        const result = await runOk(source);
+        expect(result.result.status).toBe("completed");
     });
 });

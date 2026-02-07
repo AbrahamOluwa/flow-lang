@@ -7,9 +7,14 @@ import chalk from "chalk";
 import { tokenize } from "../lexer/index.js";
 import { parse } from "../parser/index.js";
 import { analyze } from "../analyzer/index.js";
-import { execute, toDisplay, flowValueToJson } from "../runtime/index.js";
+import {
+    execute, toDisplay, flowValueToJson,
+    HTTPAPIConnector, WebhookConnector, PluginStubConnector,
+    createMockConnector,
+} from "../runtime/index.js";
 import { formatErrors } from "../errors/index.js";
-import type { FlowError, LogEntry } from "../types/index.js";
+import type { FlowError, LogEntry, ServiceDeclaration } from "../types/index.js";
+import type { ServiceConnector } from "../runtime/index.js";
 
 // ============================================================
 // Pipeline helpers
@@ -89,6 +94,28 @@ function printLog(log: LogEntry[], verbose: boolean): void {
     console.log(chalk.gray("--- End Log ---"));
 }
 
+function buildConnectors(declarations: ServiceDeclaration[]): Map<string, ServiceConnector> {
+    const connectors = new Map<string, ServiceConnector>();
+    for (const decl of declarations) {
+        switch (decl.serviceType) {
+            case "api":
+                connectors.set(decl.name, new HTTPAPIConnector(decl.target));
+                break;
+            case "webhook":
+                connectors.set(decl.name, new WebhookConnector(decl.target));
+                break;
+            case "plugin":
+                connectors.set(decl.name, new PluginStubConnector());
+                break;
+            case "ai":
+                // AI connectors will use mocks until Phase 9
+                connectors.set(decl.name, createMockConnector("ai"));
+                break;
+        }
+    }
+    return connectors;
+}
+
 // ============================================================
 // Commands
 // ============================================================
@@ -110,7 +137,7 @@ function checkCommand(filePath: string): void {
     console.log(chalk.green(`No errors found in ${filePath}`));
 }
 
-function runCommand(filePath: string, options: { input?: string; verbose?: boolean; strictEnv?: boolean }): void {
+async function runCommand(filePath: string, options: { input?: string; verbose?: boolean; strictEnv?: boolean; mock?: boolean }): Promise<void> {
     // Load .env file into process.env
     loadDotenv();
 
@@ -134,9 +161,16 @@ function runCommand(filePath: string, options: { input?: string; verbose?: boole
         }
     }
 
+    // Build connectors: real by default, mock with --mock flag
+    let connectors: Map<string, ServiceConnector> | undefined;
+    if (!options.mock && pipeline.program!.services) {
+        connectors = buildConnectors(pipeline.program!.services.declarations);
+    }
+
     // Execute
-    const result = execute(pipeline.program!, pipeline.source!, {
+    const result = await execute(pipeline.program!, pipeline.source!, {
         input,
+        connectors,
         envVars: process.env as Record<string, string>,
         verbose: options.verbose,
         strictEnv: options.strictEnv,
@@ -170,7 +204,7 @@ function runCommand(filePath: string, options: { input?: string; verbose?: boole
     }
 }
 
-function testCommand(filePath: string, options: { verbose?: boolean }): void {
+async function testCommand(filePath: string, options: { verbose?: boolean }): Promise<void> {
     const pipeline = runPipeline(filePath);
 
     if (!pipeline.success) {
@@ -181,7 +215,7 @@ function testCommand(filePath: string, options: { verbose?: boolean }): void {
 
     console.log(chalk.blue(`Testing ${filePath} with mock services...\n`));
 
-    const result = execute(pipeline.program!, pipeline.source!, {
+    const result = await execute(pipeline.program!, pipeline.source!, {
         input: {},
         envVars: { API_KEY: "mock-api-key", SECRET: "mock-secret" },
         verbose: options.verbose,
@@ -234,6 +268,7 @@ program
     .option("--input <json>", "JSON string with input data for the workflow")
     .option("--verbose", "Show detailed execution log")
     .option("--strict-env", "Error on missing environment variables instead of using empty")
+    .option("--mock", "Use mock services instead of real HTTP calls")
     .action(runCommand);
 
 program
