@@ -1,6 +1,7 @@
 import { defineConfig } from "vitepress";
 
 export default defineConfig({
+    base: "/flow-lang/",
     vite: {
         resolve: {
             preserveSymlinks: true,
