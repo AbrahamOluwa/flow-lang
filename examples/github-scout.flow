@@ -1,0 +1,49 @@
+# GitHub Repository Scout
+# Takes a GitHub username and returns a profile report
+# using the public GitHub API (no auth needed).
+
+config:
+    name: "GitHub Repository Scout"
+    version: 1
+
+services:
+    GitHub is an API at "https://api.github.com"
+
+workflow:
+    trigger: when a username is provided
+
+    step FetchProfile:
+        log "Looking up GitHub user: {request.username}"
+        get profile using GitHub at "/users/{request.username}"
+            save the result as profile
+        set name to profile.name
+        set bio to profile.bio
+        set public-repos to profile.public_repos
+        set followers to profile.followers
+        set following to profile.following
+        set created to profile.created_at
+        log "Found: {name} — {public-repos} public repos, {followers} followers"
+
+    step EvaluatePopularity:
+        if followers is above 1000:
+            set popularity to "star"
+        otherwise if followers is above 100:
+            set popularity to "popular"
+        otherwise if followers is above 10:
+            set popularity to "growing"
+        otherwise:
+            set popularity to "newcomer"
+        log "Popularity: {popularity}"
+
+    step EvaluateActivity:
+        if public-repos is above 50:
+            set activity to "very active"
+        otherwise if public-repos is above 20:
+            set activity to "active"
+        otherwise if public-repos is above 5:
+            set activity to "moderate"
+        otherwise:
+            set activity to "just getting started"
+        log "Activity level: {activity}"
+
+    complete with name name and bio bio and repos public-repos and followers followers and following following and popularity popularity and activity activity

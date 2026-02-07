@@ -949,7 +949,10 @@ async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Pro
     if (stmt.errorHandler) {
         await executeWithErrorHandler(
             async () => {
-                await connector.call(stmt.verb, stmt.description, params, path);
+                const result = await connector.call(stmt.verb, stmt.description, params, path);
+                if (stmt.resultVar) {
+                    ctx.env.set(stmt.resultVar, result);
+                }
                 addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
             },
             stmt.errorHandler,
@@ -959,7 +962,10 @@ async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Pro
         );
     } else {
         try {
-            await connector.call(stmt.verb, stmt.description, params, path);
+            const result = await connector.call(stmt.verb, stmt.description, params, path);
+            if (stmt.resultVar) {
+                ctx.env.set(stmt.resultVar, result);
+            }
             addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);

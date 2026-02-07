@@ -809,23 +809,32 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
 
         expectNewline();
 
-        // Check for error handler block
+        // Check for indented sub-clauses (save directives or error handler)
+        let resultVar: string | null = null;
         let errorHandler: ErrorHandler | null = null;
         if (match(TokenType.INDENT)) {
-            if (check(TokenType.KEYWORD_COMPOUND, "on failure") || check(TokenType.KEYWORD_COMPOUND, "on timeout")) {
-                errorHandler = parseErrorHandler();
-            }
-            // If there was an INDENT but no error handler, it might be wrong — handle gracefully
-            if (!errorHandler) {
-                // Skip any remaining content in this indented block
-                while (!check(TokenType.DEDENT) && !atEnd()) {
+            while (!check(TokenType.DEDENT) && !atEnd()) {
+                skipNewlines();
+                if (check(TokenType.DEDENT) || atEnd()) break;
+
+                if (check(TokenType.KEYWORD_COMPOUND, "save the result as")) {
                     advance();
+                    resultVar = advance().value;
+                    expectNewline();
+                } else if (check(TokenType.KEYWORD_COMPOUND, "on failure") || check(TokenType.KEYWORD_COMPOUND, "on timeout")) {
+                    errorHandler = parseErrorHandler();
+                } else {
+                    // Skip unknown content in this block
+                    while (!check(TokenType.DEDENT) && !atEnd()) {
+                        advance();
+                    }
+                    break;
                 }
             }
             match(TokenType.DEDENT);
         }
 
-        return { kind: "ServiceCall", verb, description, service, path, parameters, errorHandler, loc: location };
+        return { kind: "ServiceCall", verb, description, service, path, parameters, resultVar, errorHandler, loc: location };
     }
 
     // --------------------------------------------------------
