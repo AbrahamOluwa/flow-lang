@@ -93,14 +93,16 @@ Sample output:
 [LOG] Popularity: star
 [LOG] Activity level: moderate
 
-Workflow completed:
-  name: "Linus Torvalds"
-  bio: ""
+Workflow completed successfully.
+
+Outputs:
+  name: Linus Torvalds
+  bio: (empty)
   repos: 7
   followers: 283103
   following: 0
-  popularity: "star"
-  activity: "moderate"
+  popularity: star
+  activity: moderate
 ```
 
 ## As a webhook

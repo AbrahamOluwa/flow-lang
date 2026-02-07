@@ -97,8 +97,10 @@ You should see:
 ```
 [LOG] Hello, Alice!
 
-Workflow completed:
-  message: "Hello, Alice!"
+Workflow completed successfully.
+
+Outputs:
+  message: Hello, Alice!
 ```
 
 The `{"name": "Alice"}` you passed in becomes accessible as `request.name` inside the workflow.
