@@ -1,0 +1,51 @@
+# Order Processing Workflow
+# Validates inventory, calculates totals, and charges payment for a new order.
+
+config:
+    name: "Order Processing"
+    version: 1
+    timeout: 5 minutes
+
+services:
+    Inventory is an API at "https://inventory.example.com/api"
+    Stripe is a plugin "stripe-payments"
+    Notifier is an AI using "anthropic/claude-sonnet-4-20250514"
+
+workflow:
+    trigger: when a new order is placed
+
+    set order-id to order.id
+    set items to order.items
+    log "Processing order {order-id}"
+
+    # Step 1: Validate inventory for each item
+    step CheckInventory:
+        set item-count to 0
+        for each item in items:
+            check stock using Inventory with product item
+            set item-count to item-count plus 1
+        log "Checked {item-count} items"
+
+    # Step 2: Calculate the order total
+    step CalculateTotal:
+        set subtotal to order.subtotal
+        set tax to subtotal times 0.08
+        set total to subtotal plus tax
+        log "Order total: {total}"
+
+    # Step 3: Charge the customer
+    step ChargePayment:
+        charge payment using Stripe with amount total and currency "usd"
+            on failure:
+                retry 3 times waiting 5 seconds
+                if still failing:
+                    log "Payment failed after retries"
+                    reject with "We could not process your payment. Please try again."
+
+    # Step 4: Generate a confirmation message
+    step SendConfirmation:
+        ask Notifier to write a friendly order confirmation
+            save the result as confirmation
+        log confirmation
+
+    complete with status "processed" and order-id order-id and total total

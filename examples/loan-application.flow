@@ -1,0 +1,111 @@
+# Loan Application Processing Workflow
+# Full review pipeline: identity verification, credit check, AI risk assessment,
+# fraud detection, and final approval decision.
+
+config:
+    name: "Loan Application Review"
+    version: 2
+    description: "Automated loan application processing with AI-assisted risk analysis"
+    timeout: 10 minutes
+
+services:
+    IdentityService is an API at "https://id-verify.example.com/api"
+    CreditBureau is an API at "https://credit.example.com/api"
+    RiskAnalyst is an AI using "anthropic/claude-sonnet-4-20250514"
+    FraudDetector is an AI using "anthropic/claude-sonnet-4-20250514"
+    LoanDB is a plugin "loan-database"
+    AuditLog is a webhook at "https://audit.example.com/hook"
+
+workflow:
+    trigger: when a loan application is submitted
+
+    set applicant-name to application.name
+    set applicant-email to application.email
+    set requested-amount to application.amount
+    set applicant-id to application.id
+    log "Starting loan review for {applicant-name}, amount: {requested-amount}"
+
+    # --------------------------------------------------------
+    # Step 1: Verify the applicant's identity
+    # --------------------------------------------------------
+    step VerifyIdentity:
+        verify identity using IdentityService with applicant applicant-id
+            on failure:
+                retry 2 times waiting 3 seconds
+                if still failing:
+                    log "Identity verification unavailable"
+                    reject with "We could not verify your identity at this time. Please try again later."
+        log "Identity verified for {applicant-name}"
+
+    # --------------------------------------------------------
+    # Step 2: Pull credit report
+    # --------------------------------------------------------
+    step CreditCheck:
+        pull credit report using CreditBureau with applicant applicant-id
+            on failure:
+                retry 1 times waiting 5 seconds
+                if still failing:
+                    reject with "Unable to retrieve credit information"
+        log "Credit report retrieved"
+
+    # --------------------------------------------------------
+    # Step 3: AI risk assessment
+    # --------------------------------------------------------
+    step RiskAssessment:
+        ask RiskAnalyst to assess the risk level of this loan application and provide a recommendation
+            save the result as risk-assessment
+            save the confidence as risk-confidence
+        log "Risk assessment complete, confidence: {risk-confidence}"
+
+        if risk-confidence is below 0.5:
+            log "Low confidence in risk assessment, requesting second opinion"
+            ask RiskAnalyst to "Provide a second, more detailed analysis of this application"
+                save the result as second-opinion
+                save the confidence as second-confidence
+            log "Second opinion confidence: {second-confidence}"
+
+    # --------------------------------------------------------
+    # Step 4: Fraud screening
+    # --------------------------------------------------------
+    step FraudScreening:
+        ask FraudDetector to check this loan application for potential fraud indicators
+            save the result as fraud-check
+            save the confidence as fraud-confidence
+
+        if fraud-confidence is above 0.9:
+            log "High-confidence fraud check passed"
+        otherwise if fraud-confidence is above 0.6:
+            log "Fraud check inconclusive, flagging for manual review"
+        otherwise:
+            log "Fraud check raised concerns"
+            reject with "Your application requires additional manual review"
+
+    # --------------------------------------------------------
+    # Step 5: Calculate loan terms
+    # --------------------------------------------------------
+    step CalculateTerms:
+        set base-rate to 5.5
+        set risk-adjustment to 0
+
+        if requested-amount is above 50000:
+            set risk-adjustment to risk-adjustment plus 1.5
+        otherwise if requested-amount is above 20000:
+            set risk-adjustment to risk-adjustment plus 0.75
+
+        set final-rate to base-rate plus risk-adjustment
+        set monthly-payment to requested-amount times final-rate divided by 1200
+        set monthly-payment to monthly-payment rounded to 2
+        log "Calculated rate: {final-rate}, monthly payment: {monthly-payment}"
+
+    # --------------------------------------------------------
+    # Step 6: Record the decision and complete
+    # --------------------------------------------------------
+    step RecordDecision:
+        set decision-summary to "Application approved"
+        log decision-summary
+
+        record decision using LoanDB with applicant applicant-id and status "approved" and rate final-rate
+
+        notify audit using AuditLog with event "loan-approved" and applicant applicant-id
+
+    complete with status "approved" and applicant applicant-name and amount requested-amount and rate final-rate and monthly-payment monthly-payment

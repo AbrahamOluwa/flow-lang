@@ -1,0 +1,23 @@
+# Email Verification Workflow
+# Validates a submitted email address and returns the result.
+
+config:
+    name: "Email Verification"
+    version: 1
+
+services:
+    EmailVerifier is an API at "https://verify.example.com/api"
+
+workflow:
+    trigger: when a form is submitted
+
+    set email to signup.email
+    log "Verifying email: {email}"
+
+    verify email using EmailVerifier with address email
+
+    if email is not empty:
+        log "Email is valid"
+        complete with status "verified" and email email
+    otherwise:
+        reject with "The email address could not be verified"
