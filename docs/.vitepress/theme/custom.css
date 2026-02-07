@@ -1,0 +1,73 @@
+/* Flow Documentation — Theme Overrides */
+
+:root {
+    --vp-c-brand-1: #6366f1;
+    --vp-c-brand-2: #818cf8;
+    --vp-c-brand-3: #4f46e5;
+    --vp-c-brand-soft: rgba(99, 102, 241, 0.14);
+}
+
+.dark {
+    --vp-c-brand-1: #818cf8;
+    --vp-c-brand-2: #a5b4fc;
+    --vp-c-brand-3: #6366f1;
+    --vp-c-brand-soft: rgba(129, 140, 248, 0.14);
+}
+
+/* Hide VitePress footer on home page — our component has its own CTA */
+.is-home .VPFooter {
+    display: none;
+}
+
+/* Home page: full-width, no padding from VitePress layout */
+.is-home .VPContent {
+    padding: 0 !important;
+}
+
+.is-home .VPDoc .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+}
+
+.is-home .VPDoc .content {
+    max-width: 100% !important;
+    padding: 0 !important;
+}
+
+.is-home .vp-doc {
+    padding: 0 !important;
+}
+
+/* Force dark background for home page to match the landing page design */
+.is-home {
+    background: #0a0a0b;
+}
+
+/* Docs pages — feature cards and polish */
+.VPFeature {
+    border: 1px solid var(--vp-c-divider) !important;
+    border-radius: 12px !important;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.VPFeature:hover {
+    border-color: var(--vp-c-brand-1) !important;
+    box-shadow: 0 4px 24px rgba(99, 102, 241, 0.08);
+}
+
+/* Code blocks in docs pages */
+.vp-doc div[class*="language-"] {
+    border-radius: 10px;
+    border: 1px solid var(--vp-c-divider);
+}
+
+/* Button styling */
+.VPButton.brand {
+    background-color: var(--vp-c-brand-1) !important;
+    border-color: var(--vp-c-brand-1) !important;
+    transition: opacity 0.2s ease;
+}
+
+.VPButton.brand:hover {
+    opacity: 0.9;
+}
