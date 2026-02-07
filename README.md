@@ -12,7 +12,7 @@ config:
 services:
     Inventory is an API at "https://inventory.example.com/api"
     Stripe is a plugin "stripe-payments"
-    Notifier is an AI using "anthropic/claude-sonnet-4-20250514"
+    Notifier is an AI using "openai/gpt-4o"
 
 workflow:
     trigger: when a new order is placed
@@ -47,14 +47,38 @@ workflow:
 
 **Flow is a programming language for people who aren't programmers.** It lets operations teams, business analysts, and product managers write automated workflows in structured English — no semicolons, no brackets, no classes. If you can write a process document, you can write a Flow program.
 
-The interpreter is built in TypeScript. It reads `.flow` files, checks them for errors with plain-English messages, and executes them.
+## Installation
+
+```bash
+npm install -g flow-lang
+```
+
+Requires Node.js 18 or later.
 
 ## Quick Start
 
 ```bash
-npm install
-npm run build
-flow run examples/order-processing.flow --input '{"order": {"id": "123", "items": ["A", "B"], "subtotal": 100}}'
+# Check a file for errors
+flow check my-workflow.flow
+
+# Run with mock services (no real API calls)
+flow test my-workflow.flow
+
+# Run for real
+flow run my-workflow.flow --input '{"order": {"id": "123", "items": ["A", "B"], "subtotal": 100}}'
+```
+
+## CLI Commands
+
+```bash
+flow check <file>                    # Parse and validate (no execution)
+flow run <file>                      # Execute a .flow file
+flow run <file> --input '<json>'     # Pass trigger data as JSON
+flow run <file> --verbose            # Show detailed execution log
+flow run <file> --mock               # Use mock services instead of real APIs
+flow run <file> --strict-env         # Error on missing environment variables
+flow test <file>                     # Dry-run with mock services
+flow test <file> --verbose           # Mock dry-run with execution log
 ```
 
 ## Language Overview
@@ -63,10 +87,11 @@ Flow has exactly **7 constructs** and **5 data types**. That's the whole languag
 
 ### Service Calls
 
-Call an external API, plugin, or webhook:
+Call real REST APIs, AI models, webhooks, or plugins:
 
 ```
 verify email using EmailVerifier with address email
+get user using GitHub at "/users/octocat"
 charge payment using Stripe with amount total and currency "usd"
 ```
 
@@ -90,6 +115,8 @@ ask RiskAnalyst to assess the risk level of this loan application
     save the result as risk-assessment
     save the confidence as risk-confidence
 ```
+
+Works with OpenAI and Anthropic models out of the box.
 
 ### Variables
 
@@ -154,6 +181,37 @@ Flow uses English words instead of symbols:
 
 There are no nulls. If a value doesn't exist, it's `empty` — and you can check for it with `is empty` or `is not empty`.
 
+## Services
+
+Flow connects to real external services:
+
+```
+services:
+    # REST APIs — verb inference maps English to HTTP methods
+    GitHub is an API at "https://api.github.com"
+
+    # AI agents — OpenAI and Anthropic supported
+    Analyst is an AI using "openai/gpt-4o"
+    Claude is an AI using "anthropic/claude-sonnet-4-20250514"
+
+    # Webhooks — always POST
+    SlackNotifier is a webhook at "https://hooks.slack.com/..."
+
+    # Plugins — stub connector for future plugin system
+    Stripe is a plugin "stripe-payments"
+```
+
+### API Keys
+
+Create a `.env` file in your project root:
+
+```
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Flow loads `.env` automatically via dotenv. Access any environment variable with `env.VARIABLE_NAME`.
+
 ## Error Messages
 
 Flow doesn't show stack traces. Every error is written in plain English with the exact line, what went wrong, and how to fix it:
@@ -173,62 +231,9 @@ Error in loan-application.flow, line 12:
             EmailChecker is an API at "https://..."
 ```
 
-## CLI Commands
-
-```bash
-flow check <file>        # Parse and validate a .flow file (no execution)
-flow run <file>          # Execute a .flow file
-flow run <file> --input '{"key": "value"}'   # Pass trigger data as JSON
-flow run <file> --verbose                     # Show detailed execution log
-flow test <file>         # Dry-run with mock services
-flow test <file> --dry-run --verbose          # Preview execution without side effects
-```
-
-## Project Structure
-
-```
-src/
-  lexer/          # Turns source text into tokens
-  parser/         # Turns tokens into an abstract syntax tree
-  analyzer/       # Validates the tree (catches errors before running)
-  runtime/        # Executes the tree
-  cli/            # Command-line interface
-  types/          # Shared type definitions
-  errors/         # Error formatting and suggestions
-tests/            # 351 tests across all stages
-examples/         # Three complete .flow programs
-```
-
-The interpreter pipeline:
-
-```
-.flow file  -->  Lexer  -->  Parser  -->  Analyzer  -->  Runtime
-  (text)        (tokens)      (tree)     (validated)    (result)
-```
-
-## Project Status
-
-| Component | Status | Tests |
-|---|---|---|
-| Lexer | Done | 100 |
-| Parser | Done | 64 |
-| Semantic Analyzer | Done | 41 |
-| Runtime + CLI | Done | 115 |
-| Error Formatting | Done | 14 |
-| Integration Tests | Done | 17 |
-| **Total** | | **351** |
-
-### What's Next
-
-- [ ] Real service connectors (HTTP, webhooks)
-- [ ] VS Code extension with syntax highlighting
-- [ ] REPL for interactive testing
-- [ ] `flow init` scaffolding command
-- [ ] Published npm package
-
 ## Examples
 
-The `examples/` directory has three complete workflows:
+The `examples/` directory has complete workflows:
 
 - **email-verification.flow** — Validates a submitted email address
 - **order-processing.flow** — Inventory check, payment, and confirmation
@@ -244,9 +249,7 @@ npm run build
 npm run test
 ```
 
-The test suite uses [Vitest](https://vitest.dev/). Run `npm run test` to see all 351 tests pass.
-
-If you're adding a new feature, write tests first. Each stage of the pipeline (lexer, parser, analyzer, runtime) has its own test directory with helper functions — check the existing tests for patterns to follow.
+The test suite uses [Vitest](https://vitest.dev/) with 389 tests across all pipeline stages.
 
 ## License
 

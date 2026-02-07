@@ -4,7 +4,7 @@ config:
 
 services:
     JSONPlaceholder is an API at "https://jsonplaceholder.typicode.com"
-    Claude is an AI using "anthropic/claude-sonnet-4-20250514"
+    GPT is an AI using "openai/gpt-4o"
 
 workflow:
     trigger: when a test is requested
@@ -15,7 +15,7 @@ workflow:
         log "Successfully fetched data from public API"
 
     step AskAI:
-        ask Claude to summarize what Flow is in one sentence. Flow is a domain-specific language for workflow orchestration.
+        ask GPT to summarize what Flow is in one sentence. Flow is a domain-specific language for workflow orchestration.
             save the result as summary
             save the confidence as conf
         log "AI response: {summary}"

@@ -7,21 +7,40 @@
     "bin": {
         "flow": "dist/cli/index.js"
     },
+    "files": [
+        "dist/",
+        "README.md",
+        "LICENSE"
+    ],
     "scripts": {
         "build": "tsc",
         "test": "vitest run",
         "test:watch": "vitest",
         "lint": "eslint src/ tests/",
-        "check": "tsc --noEmit"
+        "check": "tsc --noEmit",
+        "prepublishOnly": "npm run build && npm run test"
     },
     "keywords": [
         "flow",
         "dsl",
         "workflow",
         "orchestration",
-        "ai-agent"
+        "ai-agent",
+        "ai",
+        "automation",
+        "no-code",
+        "low-code"
     ],
+    "author": "Abraham Oluwa",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/AbrahamOluwa/flow-lang.git"
+    },
+    "homepage": "https://github.com/AbrahamOluwa/flow-lang",
+    "engines": {
+        "node": ">=18.0.0"
+    },
     "devDependencies": {
         "@types/node": "^22.0.0",
         "@typescript-eslint/eslint-plugin": "^8.0.0",
