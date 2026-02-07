@@ -10,6 +10,7 @@ import { analyze } from "../analyzer/index.js";
 import {
     execute, toDisplay, flowValueToJson,
     HTTPAPIConnector, WebhookConnector, PluginStubConnector,
+    AnthropicConnector, OpenAIConnector,
     createMockConnector,
 } from "../runtime/index.js";
 import { formatErrors } from "../errors/index.js";
@@ -108,8 +109,13 @@ function buildConnectors(declarations: ServiceDeclaration[]): Map<string, Servic
                 connectors.set(decl.name, new PluginStubConnector());
                 break;
             case "ai":
-                // AI connectors will use mocks until Phase 9
-                connectors.set(decl.name, createMockConnector("ai"));
+                if (decl.target.startsWith("anthropic/")) {
+                    connectors.set(decl.name, new AnthropicConnector(decl.target, process.env.ANTHROPIC_API_KEY));
+                } else if (decl.target.startsWith("openai/")) {
+                    connectors.set(decl.name, new OpenAIConnector(decl.target, process.env.OPENAI_API_KEY));
+                } else {
+                    connectors.set(decl.name, createMockConnector("ai"));
+                }
                 break;
         }
     }

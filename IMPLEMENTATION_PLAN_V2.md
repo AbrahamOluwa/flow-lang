@@ -104,58 +104,39 @@ Each phase is gated: all tests must pass before moving to the next phase.
 
 ---
 
-## Phase 9: Real AI Connector
+## Phase 9: Real AI Connector — COMPLETE
 
 **Goal:** `ask <Agent> to <instruction>` calls real LLMs. Returns real results and confidence scores. This is Flow's differentiator.
 
 ### Tasks
 
-- [ ] **#41 Install Anthropic SDK**
-  - Add `@anthropic-ai/sdk` as a production dependency
-  - This is the official TypeScript SDK for Claude
+- [x] **#41 Install AI SDKs**
+  - Added `@anthropic-ai/sdk` and `openai` as production dependencies
 
-- [ ] **#42 Implement ClaudeAIConnector**
+- [x] **#42 Implement AnthropicConnector**
   - New class implementing `ServiceConnector`
-  - Constructor takes model string from service declaration target (e.g., `"anthropic/claude-sonnet-4-20250514"`)
-  - Reads API key from `env.ANTHROPIC_API_KEY` (passed via connector options or environment)
-  - Request mapping:
-    - System prompt: "You are a workflow assistant. Respond with a JSON object containing `result` (your response as a string) and `confidence` (a number between 0 and 1 indicating your confidence)."
-    - User message: the instruction from the `ask` statement plus any context from params
-    - Model: extracted from target string (strip `anthropic/` prefix)
-    - Max tokens: 1024 (configurable later)
-  - Response mapping:
-    - Parse Claude's response as JSON
-    - Return `FlowRecord` with `result` (FlowText) and `confidence` (FlowNumber)
-    - If JSON parsing fails: return result as full text, confidence as 0.5
-  - Error handling:
-    - Missing API key: throw RuntimeError with clear message ("Set ANTHROPIC_API_KEY in your .env file")
-    - Rate limit: throw RuntimeError with "AI service is rate-limited, try again shortly"
-    - Other API errors: throw RuntimeError with API error message
+  - Constructor takes target string and API key (defers missing-key error to call time)
+  - Strips `anthropic/` prefix from target to get model name
+  - System prompt instructs LLM to return JSON `{ result, confidence }`
+  - Params included as context in the user message
+  - Dynamic import of SDK (only loaded when needed)
+  - Falls back to raw text + 0.5 confidence if JSON parsing fails
 
-- [ ] **#43 Implement OpenAIConnector** (optional, same pattern)
-  - Same interface, uses `openai` npm package
-  - Reads `env.OPENAI_API_KEY`
-  - Model string from target (e.g., `"openai/gpt-4o"`)
-  - Same JSON response format requirement
+- [x] **#43 Implement OpenAIConnector**
+  - Same pattern as AnthropicConnector
+  - Strips `openai/` prefix, uses `chat.completions.create()`
+  - Same system prompt and fallback behavior
 
-- [ ] **#44 Wire AI connectors into CLI**
-  - In `flow run`: when `serviceType === "ai"`:
-    - Parse target: `"anthropic/..."` → ClaudeAIConnector
-    - Parse target: `"openai/..."` → OpenAIConnector
-    - Unknown provider → RuntimeError with "Unknown AI provider" message
-  - Connector receives env vars for API key access
+- [x] **#44 Wire AI connectors into CLI**
+  - `buildConnectors()` routes by target prefix: `anthropic/` → AnthropicConnector, `openai/` → OpenAIConnector
+  - Unknown provider falls back to mock
+  - API keys read from `process.env` (loaded by dotenv)
 
-- [ ] **#45 Write tests** (target: ~15 tests)
-  - ClaudeAIConnector unit tests (mock Anthropic SDK):
-    - Successful call returns FlowRecord with result and confidence
-    - Instruction and params passed correctly
-    - Missing API key throws clear error
-    - Rate limit error handled
-    - Non-JSON response falls back to text + 0.5 confidence
-    - Model string parsed correctly from target
-  - OpenAIConnector: same pattern (if implemented)
-  - Integration: `ask Agent to ...` with mock SDK returns real-shaped data
-  - `flow test` still uses mock AI (no real API calls)
+- [x] **#45 Write tests** (16 new tests, 389 total)
+  - AnthropicConnector: model parsing, missing key error, JSON response, non-JSON fallback, SDK error, params context
+  - OpenAIConnector: model parsing, missing key error, JSON response, non-JSON fallback, SDK error
+  - Provider routing: Anthropic, OpenAI, mock fallback with ask statement
+  - Created `examples/real-api-test.flow` for manual end-to-end testing
 
 ---
 
@@ -403,7 +384,7 @@ Each phase is gated: all tests must pass before moving to the next phase.
 ```
 Phase 7:  Secrets/Env        →  COMPLETE     (10 tests, 361 total)
 Phase 8:  HTTP Connector      →  COMPLETE     (12 tests, 373 total)
-Phase 9:  AI Connector        →  ~15 tests   (Claude/GPT integration)
+Phase 9:  AI Connector        →  COMPLETE     (16 tests, 389 total)
 --- npm publish ---
 Phase 10: VS Code Extension   →  no tests    (TextMate grammar + snippets)
 Phase 11: Webhook Server      →  ~15 tests   (Express server)

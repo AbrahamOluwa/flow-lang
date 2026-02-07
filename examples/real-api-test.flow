@@ -1,0 +1,24 @@
+config:
+    name: "Real API End-to-End Test"
+    version: 1
+
+services:
+    JSONPlaceholder is an API at "https://jsonplaceholder.typicode.com"
+    Claude is an AI using "anthropic/claude-sonnet-4-20250514"
+
+workflow:
+    trigger: when a test is requested
+
+    step FetchFromAPI:
+        log "Fetching a post from JSONPlaceholder..."
+        get post using JSONPlaceholder at "/posts/1"
+        log "Successfully fetched data from public API"
+
+    step AskAI:
+        ask Claude to summarize what Flow is in one sentence. Flow is a domain-specific language for workflow orchestration.
+            save the result as summary
+            save the confidence as conf
+        log "AI response: {summary}"
+        log "Confidence: {conf}"
+
+    complete with status "success" and summary summary

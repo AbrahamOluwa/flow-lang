@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { tokenize } from "../../src/lexer/index.js";
 import { parse } from "../../src/parser/index.js";
 import { analyze } from "../../src/analyzer/index.js";
@@ -13,6 +13,7 @@ import {
     RuntimeError,
     inferHTTPMethod,
     HTTPAPIConnector, WebhookConnector, PluginStubConnector,
+    AnthropicConnector, OpenAIConnector,
 } from "../../src/runtime/index.js";
 import type { FlowValue, ExecutionResult } from "../../src/types/index.js";
 
@@ -1097,5 +1098,238 @@ describe("Runtime — service call with at keyword", () => {
         ].join("\n");
         const result = await runOk(source);
         expect(result.result.status).toBe("completed");
+    });
+});
+
+// ============================================================
+// AnthropicConnector
+// ============================================================
+
+describe("AnthropicConnector", () => {
+    it("strips anthropic/ prefix from model name", () => {
+        const conn = new AnthropicConnector("anthropic/claude-sonnet-4-20250514", "test-key");
+        expect(conn.getModel()).toBe("claude-sonnet-4-20250514");
+    });
+
+    it("uses raw model name when no prefix", () => {
+        const conn = new AnthropicConnector("claude-sonnet-4-20250514", "test-key");
+        expect(conn.getModel()).toBe("claude-sonnet-4-20250514");
+    });
+
+    it("throws when API key is missing", async () => {
+        const conn = new AnthropicConnector("anthropic/claude-sonnet-4-20250514", undefined);
+        await expect(conn.call("ask", "test", new Map())).rejects.toThrow("ANTHROPIC_API_KEY");
+    });
+
+    it("returns record with result and confidence from JSON response", async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            content: [{ type: "text", text: '{"result": "Looks good", "confidence": 0.95}' }],
+        });
+
+        vi.doMock("@anthropic-ai/sdk", () => ({
+            default: class {
+                messages = { create: mockCreate };
+            },
+        }));
+
+        // Re-import to pick up the mock
+        const { AnthropicConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("anthropic/claude-sonnet-4-20250514", "test-key");
+        const result = await conn.call("ask", "analyze this", new Map());
+
+        expect(result.type).toBe("record");
+        if (result.type === "record") {
+            expect(result.value.get("result")).toEqual(text("Looks good"));
+            expect(result.value.get("confidence")).toEqual(num(0.95));
+        }
+
+        vi.doUnmock("@anthropic-ai/sdk");
+    });
+
+    it("falls back to text + 0.5 confidence on non-JSON response", async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            content: [{ type: "text", text: "Just a plain text response" }],
+        });
+
+        vi.doMock("@anthropic-ai/sdk", () => ({
+            default: class {
+                messages = { create: mockCreate };
+            },
+        }));
+
+        const { AnthropicConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("anthropic/claude-sonnet-4-20250514", "test-key");
+        const result = await conn.call("ask", "test", new Map());
+
+        expect(result.type).toBe("record");
+        if (result.type === "record") {
+            expect(result.value.get("result")).toEqual(text("Just a plain text response"));
+            expect(result.value.get("confidence")).toEqual(num(0.5));
+        }
+
+        vi.doUnmock("@anthropic-ai/sdk");
+    });
+
+    it("re-throws SDK errors", async () => {
+        vi.doMock("@anthropic-ai/sdk", () => ({
+            default: class {
+                messages = {
+                    create: vi.fn().mockRejectedValue(new Error("rate limit exceeded")),
+                };
+            },
+        }));
+
+        const { AnthropicConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("anthropic/claude-sonnet-4-20250514", "test-key");
+        await expect(conn.call("ask", "test", new Map())).rejects.toThrow("rate limit exceeded");
+
+        vi.doUnmock("@anthropic-ai/sdk");
+    });
+
+    it("includes params as context in the prompt", async () => {
+        let capturedContent = "";
+        const mockCreate = vi.fn().mockImplementation((opts: { messages: Array<{ content: string }> }) => {
+            capturedContent = opts.messages[0]!.content;
+            return Promise.resolve({
+                content: [{ type: "text", text: '{"result": "ok", "confidence": 0.8}' }],
+            });
+        });
+
+        vi.doMock("@anthropic-ai/sdk", () => ({
+            default: class {
+                messages = { create: mockCreate };
+            },
+        }));
+
+        const { AnthropicConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("anthropic/test", "test-key");
+        const params = new Map<string, FlowValue>();
+        params.set("name", text("Alice"));
+        await conn.call("ask", "analyze user", params);
+
+        expect(capturedContent).toContain("analyze user");
+        expect(capturedContent).toContain("name: Alice");
+
+        vi.doUnmock("@anthropic-ai/sdk");
+    });
+});
+
+// ============================================================
+// OpenAIConnector
+// ============================================================
+
+describe("OpenAIConnector", () => {
+    it("strips openai/ prefix from model name", () => {
+        const conn = new OpenAIConnector("openai/gpt-4o", "test-key");
+        expect(conn.getModel()).toBe("gpt-4o");
+    });
+
+    it("uses raw model name when no prefix", () => {
+        const conn = new OpenAIConnector("gpt-4o", "test-key");
+        expect(conn.getModel()).toBe("gpt-4o");
+    });
+
+    it("throws when API key is missing", async () => {
+        const conn = new OpenAIConnector("openai/gpt-4o", undefined);
+        await expect(conn.call("ask", "test", new Map())).rejects.toThrow("OPENAI_API_KEY");
+    });
+
+    it("returns record with result and confidence from JSON response", async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            choices: [{ message: { content: '{"result": "All clear", "confidence": 0.88}' } }],
+        });
+
+        vi.doMock("openai", () => ({
+            default: class {
+                chat = { completions: { create: mockCreate } };
+            },
+        }));
+
+        const { OpenAIConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("openai/gpt-4o", "test-key");
+        const result = await conn.call("ask", "check this", new Map());
+
+        expect(result.type).toBe("record");
+        if (result.type === "record") {
+            expect(result.value.get("result")).toEqual(text("All clear"));
+            expect(result.value.get("confidence")).toEqual(num(0.88));
+        }
+
+        vi.doUnmock("openai");
+    });
+
+    it("falls back to text + 0.5 confidence on non-JSON response", async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            choices: [{ message: { content: "Plain text from GPT" } }],
+        });
+
+        vi.doMock("openai", () => ({
+            default: class {
+                chat = { completions: { create: mockCreate } };
+            },
+        }));
+
+        const { OpenAIConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("openai/gpt-4o", "test-key");
+        const result = await conn.call("ask", "test", new Map());
+
+        expect(result.type).toBe("record");
+        if (result.type === "record") {
+            expect(result.value.get("result")).toEqual(text("Plain text from GPT"));
+            expect(result.value.get("confidence")).toEqual(num(0.5));
+        }
+
+        vi.doUnmock("openai");
+    });
+
+    it("re-throws SDK errors", async () => {
+        vi.doMock("openai", () => ({
+            default: class {
+                chat = {
+                    completions: {
+                        create: vi.fn().mockRejectedValue(new Error("insufficient quota")),
+                    },
+                };
+            },
+        }));
+
+        const { OpenAIConnector: MockedConnector } = await import("../../src/runtime/index.js");
+        const conn = new MockedConnector("openai/gpt-4o", "test-key");
+        await expect(conn.call("ask", "test", new Map())).rejects.toThrow("insufficient quota");
+
+        vi.doUnmock("openai");
+    });
+});
+
+// ============================================================
+// AI provider routing
+// ============================================================
+
+describe("AI provider routing", () => {
+    it("anthropic target creates AnthropicConnector", () => {
+        const conn = new AnthropicConnector("anthropic/claude-sonnet-4-20250514", "key");
+        expect(conn).toBeInstanceOf(AnthropicConnector);
+        expect(conn.getModel()).toBe("claude-sonnet-4-20250514");
+    });
+
+    it("openai target creates OpenAIConnector", () => {
+        const conn = new OpenAIConnector("openai/gpt-4o", "key");
+        expect(conn).toBeInstanceOf(OpenAIConnector);
+        expect(conn.getModel()).toBe("gpt-4o");
+    });
+
+    it("ask statement works with mock AI connector", async () => {
+        const source = [
+            "services:",
+            '    Bot is an AI using "anthropic/claude-sonnet-4-20250514"',
+            "workflow:",
+            "    ask Bot to summarize the data",
+            "        save the result as summary",
+            "        save the confidence as conf",
+            '    log "done"',
+        ].join("\n");
+        const result = await runOk(source);
+        expect(result.result.status).toBe("completed");
+        expect(logMessages(result)).toEqual(["done"]);
     });
 });

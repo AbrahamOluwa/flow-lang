@@ -18,7 +18,7 @@
 | 6. Examples | Complete | 17 (integration) | Three .flow files + end-to-end integration tests |
 | 7. Secrets/Env | Complete | 10 | dotenv loading, `--strict-env` flag, verbose warnings |
 | 8. HTTP Connector | Complete | 12 | Async refactor, verb inference, `at` keyword, real HTTP, `--mock` flag |
-| 9. AI Connector | Planned | ~15 | Claude/GPT integration via SDKs |
+| 9. AI Connector | Complete | 16 | Anthropic + OpenAI via SDKs, dynamic import, JSON response parsing |
 | npm publish | Planned | — | Publish to npm registry |
 | 10. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
 | 11. Webhook Server | Planned | ~15 | `flow serve` command, Express server |
@@ -26,7 +26,7 @@
 | 13. Docs Site | Planned | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 373 (phases 1–8) | Target: ~423+ after phases 9–12**
+**Tests passing: 389 (phases 1–9) | Target: ~423+ after phases 10–12**
 
 ## Decisions Log
 
@@ -52,6 +52,9 @@ Decisions made during implementation that weren't in the original brief:
 18. **Verb inference for HTTP methods** — The HTTP connector infers the HTTP method from the English verb: get/fetch/list→GET, create/send/submit→POST, update/modify→PUT, delete/remove→DELETE. Unknown verbs default to POST.
 19. **`at` keyword for URL paths** — Service calls support optional `at "/path"` between service name and `with` params: `get user using API at "/users/123" with status "active"`.
 20. **`--mock` flag on `flow run`** — Forces mock connectors instead of real HTTP calls, useful for development and testing.
+21. **AI connectors use dynamic import** — `@anthropic-ai/sdk` and `openai` are loaded via `await import()` only when actually called, so missing one SDK doesn't crash the other.
+22. **AI response format: JSON with fallback** — System prompt asks for `{ result, confidence }` JSON. If the LLM returns non-JSON, the raw text becomes `result` and confidence defaults to 0.5.
+23. **AI API key deferred validation** — Missing API key error is thrown at `call()` time, not at connector construction. A declared-but-unused AI service won't crash the workflow.
 
 ## What This Is
 
@@ -89,7 +92,7 @@ tests/
   lexer/          # 100 tests
   parser/         # 67 tests
   analyzer/       # 41 tests
-  runtime/        # 134 tests
+  runtime/        # 150 tests
   errors/         # 14 tests
   integration/    # 17 tests — end-to-end .flow file tests
 examples/         # Three .flow files (email-verification, order-processing, loan-application)
@@ -103,7 +106,7 @@ interface ServiceConnector {
     call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue>;
 }
 ```
-All service interactions (API, AI, plugin, webhook) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector` (for real execution).
+All service interactions (API, AI, plugin, webhook) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector`, `AnthropicConnector`, `OpenAIConnector` (for real execution).
 
 ### RuntimeOptions (extension point for connectors)
 ```typescript

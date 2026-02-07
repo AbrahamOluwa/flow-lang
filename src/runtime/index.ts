@@ -448,6 +448,115 @@ export class PluginStubConnector implements ServiceConnector {
 }
 
 // ============================================================
+// AI Connectors
+// ============================================================
+
+const AI_SYSTEM_PROMPT = `You are a workflow assistant. Respond ONLY with a JSON object containing:
+- "result": your response as a string
+- "confidence": a number between 0 and 1 indicating your confidence
+
+Example: {"result": "The application looks good", "confidence": 0.92}`;
+
+function buildAIContext(params: Map<string, FlowValue>): string {
+    if (params.size === 0) return "";
+    const parts: string[] = [];
+    for (const [k, v] of params) {
+        parts.push(`${k}: ${toDisplay(v)}`);
+    }
+    return "\n\nContext:\n" + parts.join("\n");
+}
+
+function parseAIResponse(responseText: string): FlowValue {
+    try {
+        const parsed = JSON.parse(responseText) as Record<string, unknown>;
+        return record({
+            result: text(String(parsed["result"] ?? responseText)),
+            confidence: num(Number(parsed["confidence"] ?? 0.5)),
+        });
+    } catch {
+        return record({
+            result: text(responseText),
+            confidence: num(0.5),
+        });
+    }
+}
+
+export class AnthropicConnector implements ServiceConnector {
+    private model: string;
+    private apiKey: string | undefined;
+
+    constructor(target: string, apiKey: string | undefined) {
+        this.model = target.startsWith("anthropic/") ? target.slice(10) : target;
+        this.apiKey = apiKey;
+    }
+
+    getModel(): string {
+        return this.model;
+    }
+
+    async call(_verb: string, description: string, params: Map<string, FlowValue>): Promise<FlowValue> {
+        if (!this.apiKey) {
+            throw new Error("Missing API key. Set ANTHROPIC_API_KEY in your .env file.");
+        }
+
+        const { default: Anthropic } = await import("@anthropic-ai/sdk");
+        const client = new Anthropic({ apiKey: this.apiKey });
+
+        const userMessage = description + buildAIContext(params);
+
+        const message = await client.messages.create({
+            model: this.model,
+            max_tokens: 1024,
+            system: AI_SYSTEM_PROMPT,
+            messages: [{ role: "user", content: userMessage }],
+        });
+
+        const textBlock = message.content.find((b: { type: string }) => b.type === "text");
+        const responseText = textBlock && "text" in textBlock ? (textBlock as { type: "text"; text: string }).text : "";
+
+        return parseAIResponse(responseText);
+    }
+}
+
+export class OpenAIConnector implements ServiceConnector {
+    private model: string;
+    private apiKey: string | undefined;
+
+    constructor(target: string, apiKey: string | undefined) {
+        this.model = target.startsWith("openai/") ? target.slice(7) : target;
+        this.apiKey = apiKey;
+    }
+
+    getModel(): string {
+        return this.model;
+    }
+
+    async call(_verb: string, description: string, params: Map<string, FlowValue>): Promise<FlowValue> {
+        if (!this.apiKey) {
+            throw new Error("Missing API key. Set OPENAI_API_KEY in your .env file.");
+        }
+
+        const { default: OpenAI } = await import("openai");
+        const client = new OpenAI({ apiKey: this.apiKey });
+
+        const userMessage = description + buildAIContext(params);
+
+        const response = await client.chat.completions.create({
+            model: this.model,
+            max_tokens: 1024,
+            messages: [
+                { role: "system", content: AI_SYSTEM_PROMPT },
+                { role: "user", content: userMessage },
+            ],
+        });
+
+        const responseText = response.choices[0]?.message?.content ?? "";
+
+        return parseAIResponse(responseText);
+    }
+}
+
+// ============================================================
 // Flow control signals
 // ============================================================
 
