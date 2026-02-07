@@ -92,6 +92,13 @@ Now run it! The `--input` flag lets you pass data into the workflow:
 flow run hello.flow --input '{"name": "Alice"}'
 ```
 
+::: tip Windows users
+Windows CMD and PowerShell handle quotes differently. Use escaped double quotes instead:
+```bash
+flow run hello.flow --input "{\"name\": \"Alice\"}"
+```
+:::
+
 You should see:
 
 ```

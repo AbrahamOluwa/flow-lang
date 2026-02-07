@@ -76,6 +76,13 @@ flow run hello.flow --mock --input '{"name": "test"}'
 flow run my-workflow.flow --strict-env
 ```
 
+::: tip Windows users
+Windows CMD and PowerShell handle quotes differently. Use escaped double quotes instead:
+```bash
+flow run hello.flow --input "{\"name\": \"Alice\"}"
+```
+:::
+
 ### Input format
 
 The `--input` option accepts a JSON string. The data becomes available as the `request` object in your workflow:
@@ -175,6 +182,13 @@ curl -X POST http://localhost:3000 \
   -H "Content-Type: application/json" \
   -d '{"username": "octocat"}'
 ```
+
+::: tip Windows users
+On Windows, use escaped double quotes for JSON:
+```bash
+curl -X POST http://localhost:3000 -H "Content-Type: application/json" -d "{\"username\": \"octocat\"}"
+```
+:::
 
 The JSON body becomes the `request` object in the workflow.
 
