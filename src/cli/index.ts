@@ -74,23 +74,32 @@ function printErrors(errors: FlowError[]): void {
 }
 
 function printLog(log: LogEntry[], verbose: boolean): void {
-    if (!verbose) return;
     if (log.length === 0) return;
 
-    console.log(chalk.gray("\n--- Execution Log ---"));
+    // Always print user log statements
     for (const entry of log) {
-        const stepLabel = entry.step ? chalk.cyan(`[${entry.step}]`) + " " : "";
-        const resultColor = entry.result === "success" ? chalk.green : entry.result === "failure" ? chalk.red : chalk.yellow;
-        const resultLabel = resultColor(entry.result);
-
-        let detail = "";
-        if (entry.details["message"]) {
-            detail = ` ${entry.details["message"]}`;
+        if (entry.action === "log" && entry.details["message"]) {
+            console.log(`[LOG] ${entry.details["message"]}`);
         }
-
-        console.log(chalk.gray(`  ${stepLabel}${entry.action} ${resultLabel}${detail}`));
     }
-    console.log(chalk.gray("--- End Log ---"));
+
+    // In verbose mode, print the full execution log
+    if (verbose) {
+        console.log(chalk.gray("\n--- Execution Log ---"));
+        for (const entry of log) {
+            const stepLabel = entry.step ? chalk.cyan(`[${entry.step}]`) + " " : "";
+            const resultColor = entry.result === "success" ? chalk.green : entry.result === "failure" ? chalk.red : chalk.yellow;
+            const resultLabel = resultColor(entry.result);
+
+            let detail = "";
+            if (entry.details["message"]) {
+                detail = ` ${entry.details["message"]}`;
+            }
+
+            console.log(chalk.gray(`  ${stepLabel}${entry.action} ${resultLabel}${detail}`));
+        }
+        console.log(chalk.gray("--- End Log ---"));
+    }
 }
 
 // ============================================================
@@ -116,7 +125,7 @@ function checkCommand(filePath: string): void {
 
 async function runCommand(filePath: string, options: { input?: string; verbose?: boolean; strictEnv?: boolean; mock?: boolean }): Promise<void> {
     // Load .env file into process.env
-    loadDotenv();
+    loadDotenv({ quiet: true });
 
     const pipeline = runPipeline(filePath);
 

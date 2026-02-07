@@ -1137,9 +1137,17 @@ export async function execute(program: Program, source: string, options?: Runtim
     globalEnv.set("env", record(envEntries));
 
     // Add input data to the environment
+    // The whole input is available as "request", and each top-level key
+    // is also a direct variable. Keys are set after the wrapper so that
+    // an explicit "request" key in the input takes precedence.
     if (options?.input) {
+        const requestEntries: Record<string, FlowValue> = {};
         for (const [key, value] of Object.entries(options.input)) {
-            globalEnv.set(key, jsonToFlowValue(value));
+            requestEntries[key] = jsonToFlowValue(value);
+        }
+        globalEnv.set("request", record(requestEntries));
+        for (const [key, value] of Object.entries(requestEntries)) {
+            globalEnv.set(key, value);
         }
     }
 
