@@ -8,13 +8,11 @@ import { tokenize } from "../lexer/index.js";
 import { parse } from "../parser/index.js";
 import { analyze } from "../analyzer/index.js";
 import {
-    execute, toDisplay, flowValueToJson,
-    HTTPAPIConnector, WebhookConnector, PluginStubConnector,
-    AnthropicConnector, OpenAIConnector,
-    createMockConnector,
+    execute, toDisplay, flowValueToJson, buildConnectors,
 } from "../runtime/index.js";
+import { startServer } from "../server/index.js";
 import { formatErrors } from "../errors/index.js";
-import type { FlowError, LogEntry, ServiceDeclaration } from "../types/index.js";
+import type { FlowError, LogEntry } from "../types/index.js";
 import type { ServiceConnector } from "../runtime/index.js";
 
 // ============================================================
@@ -93,33 +91,6 @@ function printLog(log: LogEntry[], verbose: boolean): void {
         console.log(chalk.gray(`  ${stepLabel}${entry.action} ${resultLabel}${detail}`));
     }
     console.log(chalk.gray("--- End Log ---"));
-}
-
-function buildConnectors(declarations: ServiceDeclaration[]): Map<string, ServiceConnector> {
-    const connectors = new Map<string, ServiceConnector>();
-    for (const decl of declarations) {
-        switch (decl.serviceType) {
-            case "api":
-                connectors.set(decl.name, new HTTPAPIConnector(decl.target));
-                break;
-            case "webhook":
-                connectors.set(decl.name, new WebhookConnector(decl.target));
-                break;
-            case "plugin":
-                connectors.set(decl.name, new PluginStubConnector());
-                break;
-            case "ai":
-                if (decl.target.startsWith("anthropic/")) {
-                    connectors.set(decl.name, new AnthropicConnector(decl.target, process.env.ANTHROPIC_API_KEY));
-                } else if (decl.target.startsWith("openai/")) {
-                    connectors.set(decl.name, new OpenAIConnector(decl.target, process.env.OPENAI_API_KEY));
-                } else {
-                    connectors.set(decl.name, createMockConnector("ai"));
-                }
-                break;
-        }
-    }
-    return connectors;
 }
 
 // ============================================================
@@ -283,5 +254,19 @@ program
     .option("--dry-run", "Use mock services (default)")
     .option("--verbose", "Show detailed execution log")
     .action(testCommand);
+
+program
+    .command("serve <target>")
+    .description("Start an HTTP server to trigger workflows via webhook")
+    .option("--port <number>", "Port to listen on", "3000")
+    .option("--verbose", "Log each request")
+    .option("--mock", "Use mock services instead of real connectors")
+    .action((target: string, options: { port: string; verbose?: boolean; mock?: boolean }) => {
+        startServer(target, {
+            port: parseInt(options.port, 10),
+            verbose: options.verbose ?? false,
+            mock: options.mock ?? false,
+        });
+    });
 
 program.parse();

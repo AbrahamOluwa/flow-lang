@@ -5,7 +5,7 @@
 Eight new phases (7–14) that take Flow from a working interpreter with mock services to a production-ready workflow tool with real API/AI connectors, a webhook server, and developer tooling.
 
 **Build order follows dependency chain:**
-Secrets → HTTP Connector → AI Connector → npm publish → VS Code Extension → Webhook Server → Logging → Docs Site → Hosted Runtime
+Secrets → HTTP Connector → AI Connector → npm publish → Webhook Server → VS Code Extension → Logging → Docs Site → Hosted Runtime
 
 Each phase is gated: all tests must pass before moving to the next phase.
 
@@ -146,36 +146,76 @@ Each phase is gated: all tests must pass before moving to the next phase.
 
 ### Tasks
 
-- [ ] **#46 Prepare package for publishing**
-  - Verify `package.json` fields: name, version, description, main, bin, keywords, license, repository, homepage
-  - Add `files` field to whitelist: `dist/`, `README.md`, `LICENSE`
-  - Add `engines` field: `"node": ">=18.0.0"` (required for built-in fetch)
-  - Add `prepublishOnly` script: `"npm run build && npm run test"`
-  - Verify `dist/cli/index.js` has shebang line
+- [x] **#46 Prepare package for publishing**
+  - Verified `package.json` fields: name, version, description, main, bin, keywords, license, repository, homepage
+  - Added `files` field to whitelist: `dist/`, `README.md`, `LICENSE`
+  - Added `engines` field: `"node": ">=18.0.0"` (required for built-in fetch)
+  - Added `prepublishOnly` script: `"npm run build && npm run test"`
+  - Verified `dist/cli/index.js` has shebang line
+  - Added `author` field, updated README for npm
 
-- [ ] **#47 Create npm account and publish**
-  - `npm login`
-  - `npm publish`
-  - Verify: `npm install -g flow-lang` works on a clean machine
-  - Verify: `flow --help`, `flow check`, `flow run` all work
+- [x] **#47 Create npm account and publish**
+  - `npm login` (browser-based auth)
+  - `npm publish` with granular access token
+  - Published as `flow-lang@0.1.0` (47.8 kB, 31 files)
 
 ---
 
-## Phase 10: VS Code Extension
+## Phase 10: Webhook Trigger Server — COMPLETE
 
-**Goal:** Syntax highlighting, basic autocomplete, and inline errors for `.flow` files. Quality-of-life improvement that makes Flow feel like a real language.
+**Goal:** A lightweight HTTP server that listens for incoming requests and triggers workflows automatically. Flow becomes a production tool, not just a CLI.
 
-**Why here:** Anyone writing `.flow` files during phases 8–12 benefits immediately. A TextMate grammar is a small, self-contained task.
+**Key architectural decisions:** Server module in `src/server/index.ts` separate from CLI. `createApp()` exported for testing with supertest. `.flow` files pre-parsed at startup, only `execute()` runs per request. `buildConnectors()` extracted from CLI to `src/runtime/index.ts` as shared export.
 
 ### Tasks
 
-- [ ] **#48 Create extension project**
+- [x] **#48 Install Express**
+  - Added `express` as production dependency
+  - Added `@types/express` (dev), `supertest` and `@types/supertest` (dev) for testing
+
+- [x] **#49 Implement `flow serve` command**
+  - New CLI command: `flow serve <target> --port <port> --verbose --mock`
+  - Single-file mode: `flow serve workflow.flow` — POST `/` triggers execution
+  - Directory mode: `flow serve examples/` — each `.flow` file gets a route
+  - Returns JSON: completed→200, rejected→400, error→500
+  - Logs each request in verbose mode
+
+- [x] **#50 Support multiple workflows**
+  - `flow serve <directory>` scans for `.flow` files
+  - Routes: `/email-verification`, `/order-processing`, etc.
+  - 404 for unknown routes with list of available workflows
+
+- [x] **#51 Health check and metadata endpoint**
+  - `GET /health` → `{ "status": "ok" }`
+  - `GET /` → workflow metadata (single-file) or list of workflows (directory)
+
+- [x] **#52 Graceful shutdown and error isolation**
+  - SIGINT/SIGTERM handlers for clean shutdown
+  - One workflow failure doesn't crash the server
+  - Try/catch wraps every request handler
+
+- [x] **#53 Write tests** (18 tests, 407 total)
+  - Health check and metadata (3 tests)
+  - Single-file workflow execution (4 tests)
+  - Multiple workflows from directory (4 tests)
+  - Error handling and isolation (4 tests)
+  - Configuration — mock mode, verbose mode, directory loading (3 tests)
+
+---
+
+## Phase 11: VS Code Extension
+
+**Goal:** Syntax highlighting, basic autocomplete, and inline errors for `.flow` files. Quality-of-life improvement that makes Flow feel like a real language.
+
+### Tasks
+
+- [ ] **#54 Create extension project**
   - Scaffold with `yo code` (Yeoman VS Code extension generator)
   - Separate directory: `vscode-flow/` (or separate repo `flow-lang-vscode`)
   - Extension ID: `flow-lang`
   - `package.json` with `contributes.languages` and `contributes.grammars`
 
-- [ ] **#49 Write TextMate grammar** (`flow.tmLanguage.json`)
+- [ ] **#55 Write TextMate grammar** (`flow.tmLanguage.json`)
   - Scopes:
     - `comment.line.hash` — `# ...`
     - `keyword.control` — `if`, `otherwise`, `for each`, `step`, `trigger`
@@ -191,7 +231,7 @@ Each phase is gated: all tests must pass before moving to the next phase.
     - `variable.other` — identifiers
   - File association: `*.flow`
 
-- [ ] **#50 Basic autocomplete (keyword snippets)**
+- [ ] **#56 Basic autocomplete (keyword snippets)**
   - Snippet completions for common constructs:
     - `step` → full step block template
     - `if` → if/otherwise template
@@ -202,60 +242,10 @@ Each phase is gated: all tests must pass before moving to the next phase.
     - `services` → services block template
     - `workflow` → workflow block template
 
-- [ ] **#51 Publish to VS Code Marketplace**
+- [ ] **#57 Publish to VS Code Marketplace**
   - `vsce package` → `.vsix` file
   - `vsce publish` → marketplace listing
   - Include screenshots in extension README
-
----
-
-## Phase 11: Webhook Trigger Server
-
-**Goal:** A lightweight HTTP server that listens for incoming requests and triggers workflows automatically. Flow becomes a production tool, not just a CLI.
-
-### Tasks
-
-- [ ] **#52 Install Express (or Fastify)**
-  - Add as production dependency
-  - Express is simpler; Fastify is faster. Either works — recommend Express for simplicity.
-
-- [ ] **#53 Implement `flow serve` command**
-  - New CLI command: `flow serve <file> --port <port>`
-  - Starts an HTTP server on the specified port (default: 3000)
-  - Accepts POST requests at `/` (or configurable path)
-  - Request body is parsed as JSON and passed as workflow input (same as `--input`)
-  - Runs the full pipeline: lex → parse → analyze → execute
-  - Returns JSON response:
-    - On complete: `{ "status": "completed", "outputs": { ... } }` with HTTP 200
-    - On reject: `{ "status": "rejected", "message": "..." }` with HTTP 400
-    - On error: `{ "status": "error", "message": "..." }` with HTTP 500
-  - Logs each request in verbose mode
-
-- [ ] **#54 Support multiple workflows**
-  - `flow serve <directory> --port <port>`
-  - Each `.flow` file in the directory gets a route: `/filename` (without `.flow` extension)
-  - Example: `examples/` directory → `/email-verification`, `/order-processing`, `/loan-application`
-  - 404 for unknown routes with list of available workflows
-
-- [ ] **#55 Health check and metadata endpoint**
-  - `GET /` returns list of loaded workflows with their config (name, version, trigger)
-  - `GET /health` returns `{ "status": "ok" }`
-
-- [ ] **#56 Graceful shutdown and error isolation**
-  - SIGINT/SIGTERM handlers for clean shutdown
-  - One workflow failure doesn't crash the server
-  - Request timeout matches workflow's `config.timeout` (default: 30 seconds)
-
-- [ ] **#57 Write tests** (target: ~15 tests)
-  - Server starts and responds to health check
-  - POST triggers workflow execution with input
-  - Completed workflow returns 200 with outputs
-  - Rejected workflow returns 400 with message
-  - Runtime error returns 500
-  - Multiple workflows from directory
-  - 404 for unknown routes
-  - Request body parsed as workflow input
-  - Graceful error isolation (one bad request doesn't crash server)
 
 ---
 
@@ -385,9 +375,9 @@ Each phase is gated: all tests must pass before moving to the next phase.
 Phase 7:  Secrets/Env        →  COMPLETE     (10 tests, 361 total)
 Phase 8:  HTTP Connector      →  COMPLETE     (12 tests, 373 total)
 Phase 9:  AI Connector        →  COMPLETE     (16 tests, 389 total)
---- npm publish ---
-Phase 10: VS Code Extension   →  no tests    (TextMate grammar + snippets)
-Phase 11: Webhook Server      →  ~15 tests   (Express server)
+--- npm publish ---           →  COMPLETE     (flow-lang@0.1.0)
+Phase 10: Webhook Server      →  COMPLETE     (18 tests, 407 total)
+Phase 11: VS Code Extension   →  no tests    (TextMate grammar + snippets)
 Phase 12: Logging             →  ~12 tests   (structured audit logs)
 Phase 13: Docs Site           →  no tests    (VitePress + GitHub Pages)
 Phase 14: Hosted Runtime      →  TBD         (only if validated)

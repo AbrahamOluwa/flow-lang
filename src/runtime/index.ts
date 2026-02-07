@@ -557,6 +557,39 @@ export class OpenAIConnector implements ServiceConnector {
 }
 
 // ============================================================
+// Connector factory
+// ============================================================
+
+export function buildConnectors(
+    declarations: ServiceDeclaration[]
+): Map<string, ServiceConnector> {
+    const connectors = new Map<string, ServiceConnector>();
+    for (const decl of declarations) {
+        switch (decl.serviceType) {
+            case "api":
+                connectors.set(decl.name, new HTTPAPIConnector(decl.target));
+                break;
+            case "webhook":
+                connectors.set(decl.name, new WebhookConnector(decl.target));
+                break;
+            case "plugin":
+                connectors.set(decl.name, new PluginStubConnector());
+                break;
+            case "ai":
+                if (decl.target.startsWith("anthropic/")) {
+                    connectors.set(decl.name, new AnthropicConnector(decl.target, process.env.ANTHROPIC_API_KEY));
+                } else if (decl.target.startsWith("openai/")) {
+                    connectors.set(decl.name, new OpenAIConnector(decl.target, process.env.OPENAI_API_KEY));
+                } else {
+                    connectors.set(decl.name, createMockConnector("ai"));
+                }
+                break;
+        }
+    }
+    return connectors;
+}
+
+// ============================================================
 // Flow control signals
 // ============================================================
 

@@ -19,14 +19,14 @@
 | 7. Secrets/Env | Complete | 10 | dotenv loading, `--strict-env` flag, verbose warnings |
 | 8. HTTP Connector | Complete | 12 | Async refactor, verb inference, `at` keyword, real HTTP, `--mock` flag |
 | 9. AI Connector | Complete | 16 | Anthropic + OpenAI via SDKs, dynamic import, JSON response parsing |
-| npm publish | Planned | — | Publish to npm registry |
-| 10. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
-| 11. Webhook Server | Planned | ~15 | `flow serve` command, Express server |
+| npm publish | Complete | — | Published as `flow-lang@0.1.0` on npm |
+| 10. Webhook Server | Complete | 18 | `flow serve` command, Express, single/multi-file, supertest |
+| 11. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
 | 12. Logging | Planned | ~12 | Structured JSON logs, timing, `--output-log` |
 | 13. Docs Site | Planned | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 389 (phases 1–9) | Target: ~423+ after phases 10–12**
+**Tests passing: 407 (phases 1–10) | Target: ~419+ after phase 12**
 
 ## Decisions Log
 
@@ -55,6 +55,9 @@ Decisions made during implementation that weren't in the original brief:
 21. **AI connectors use dynamic import** — `@anthropic-ai/sdk` and `openai` are loaded via `await import()` only when actually called, so missing one SDK doesn't crash the other.
 22. **AI response format: JSON with fallback** — System prompt asks for `{ result, confidence }` JSON. If the LLM returns non-JSON, the raw text becomes `result` and confidence defaults to 0.5.
 23. **AI API key deferred validation** — Missing API key error is thrown at `call()` time, not at connector construction. A declared-but-unused AI service won't crash the workflow.
+24. **`buildConnectors` extracted to runtime** — Shared function in `src/runtime/index.ts` used by both CLI and server, avoids duplication.
+25. **Server module separate from CLI** — `src/server/index.ts` exports `createApp()` (testable with supertest) and `startServer()` (used by CLI). `.flow` files pre-parsed at startup, only `execute()` runs per request.
+26. **Server routes by filename** — In directory mode, each `.flow` file becomes a POST route: `email-verification.flow` → `POST /email-verification`. Single-file mode uses `POST /`.
 
 ## What This Is
 
@@ -75,6 +78,7 @@ npm run lint         # Lint the codebase
 flow check <file>    # Parse and analyze a .flow file
 flow run <file>      # Execute a .flow file (--input <json>, --verbose, --strict-env, --mock)
 flow test <file>     # Dry-run with mock services (--dry-run, --verbose)
+flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock)
 ```
 
 ## Project Structure
@@ -85,6 +89,7 @@ src/
   parser/         # Parser: tokens -> AST
   analyzer/       # Semantic analysis: validates the AST
   runtime/        # Tree-walking interpreter + connectors
+  server/         # Express webhook server (flow serve)
   cli/            # Commander.js CLI entry point
   types/          # Shared TypeScript types (tokens, AST nodes, errors)
   errors/         # Error formatting and suggestions
@@ -93,6 +98,7 @@ tests/
   parser/         # 67 tests
   analyzer/       # 41 tests
   runtime/        # 150 tests
+  server/         # 18 tests — webhook server (supertest)
   errors/         # 14 tests
   integration/    # 17 tests — end-to-end .flow file tests
 examples/         # Three .flow files (email-verification, order-processing, loan-application)
