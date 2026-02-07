@@ -3,6 +3,8 @@
 ## Standing Rules
 
 - **Update this file at the end of every phase** — refresh the Project Status, Decisions Log, and any new conventions discovered during implementation.
+- **Run `npm run test` after every change** — all tests must pass before moving on.
+- **Detailed plan lives in `IMPLEMENTATION_PLAN_V2.md`** — this file is the quick reference, that file has the full task list.
 
 ## Project Status
 
@@ -14,8 +16,17 @@
 | 4. Analyzer | Complete | 41 | Service resolution, variable def-before-use, scope checking, duplicates |
 | 5. Runtime + CLI | Complete | 115 | Environment, evaluator, executor, mock connectors, CLI (check/run/test) |
 | 6. Examples | Complete | 17 (integration) | Three .flow files + end-to-end integration tests |
+| 7. Secrets/Env | Planned | ~10 | `.env` loading, `--strict-env` flag |
+| 8. HTTP Connector | Planned | ~20 | Async refactor, real HTTP calls, `--mock` flag |
+| 9. AI Connector | Planned | ~15 | Claude/GPT integration via SDKs |
+| npm publish | Planned | — | Publish to npm registry |
+| 10. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
+| 11. Webhook Server | Planned | ~15 | `flow serve` command, Express server |
+| 12. Logging | Planned | ~12 | Structured JSON logs, timing, `--output-log` |
+| 13. Docs Site | Planned | — | VitePress + GitHub Pages |
+| 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Total tests passing: 351**
+**Tests passing: 351 (phases 1–6) | Target: ~423+ after phases 7–12**
 
 ## Decisions Log
 
@@ -31,7 +42,7 @@ Decisions made during implementation that weren't in the original brief:
 8. **Dot-access roots are lenient** — expressions like `signup.email` or `order.items` are not flagged as undefined variables. They are treated as implicit trigger/service data, since Flow users access external data via dot notation.
 9. **Scope model: loops create child scopes, steps don't** — `for each` loop variables are scoped to the loop body (child scope), while `step` blocks are purely organizational and share the parent scope.
 10. **`env` is predefined** — the `env` identifier is always available in the global scope so `env.API_KEY` works without an explicit `set`.
-11. **Runtime is synchronous** — no async/await. Mock connectors are synchronous. Retry waits are skipped (no actual delays).
+11. **Runtime is synchronous** — no async/await. Mock connectors are synchronous. Retry waits are skipped (no actual delays). **Will become async in Phase 8.**
 12. **Complete/reject use throw signals** — `CompleteSignal` and `RejectSignal` are thrown to halt execution from any nesting depth, caught in the main `execute()` function.
 13. **Missing dot-access fields return FlowEmpty** — `user.missing_field` returns `FlowEmpty` rather than throwing, consistent with the "no nulls but has empty" design.
 14. **Math on text with `plus` means concatenation** — `"hello" plus " world"` produces `"hello world"`. Other math operators require numbers.
@@ -67,7 +78,7 @@ src/
   lexer/          # Tokenizer: source text -> tokens
   parser/         # Parser: tokens -> AST
   analyzer/       # Semantic analysis: validates the AST
-  runtime/        # Tree-walking interpreter
+  runtime/        # Tree-walking interpreter + connectors
   cli/            # Commander.js CLI entry point
   types/          # Shared TypeScript types (tokens, AST nodes, errors)
   errors/         # Error formatting and suggestions
@@ -81,6 +92,35 @@ tests/
 examples/         # Three .flow files (email-verification, order-processing, loan-application)
 ```
 
+## Key Architecture Notes
+
+### ServiceConnector Interface
+```typescript
+interface ServiceConnector {
+    call(verb: string, description: string, params: Map<string, FlowValue>): FlowValue;
+}
+```
+All service interactions (API, AI, plugin, webhook) go through this interface. Phase 8 will make it async (`Promise<FlowValue>`).
+
+### RuntimeOptions (extension point for connectors)
+```typescript
+interface RuntimeOptions {
+    input?: Record<string, unknown>;
+    connectors?: Map<string, ServiceConnector>;
+    envVars?: Record<string, string>;
+    verbose?: boolean;
+}
+```
+Custom connectors are injected via `execute(program, source, options)`. The CLI builds the connector map from service declarations.
+
+### Execution Flow
+```
+.flow file → Lexer → Parser → Analyzer → Runtime
+  (text)     (tokens)  (AST)   (validated)  (result)
+```
+
+Each stage is independent and testable in isolation.
+
 ## Code Conventions
 
 - **TypeScript strict mode** — no `any` types, ever
@@ -91,6 +131,7 @@ examples/         # Three .flow files (email-verification, order-processing, loa
 - No emojis in source code or comments
 - Test helpers: `types()`, `values()` for lexer; `pOk()`, `firstStmt()`, `pErrors()` for parser; `check()`, `checkOk()`, `checkHasError()`, `checkHasWarning()` for analyzer; `run()`, `runOk()`, `logMessages()` for runtime
 - Error classes (`LexerError`, `ParserError`, `RuntimeError`) wrap `FlowError` for structured reporting
+- Mock external dependencies in tests (fetch, SDKs) using `vi.fn()` — never make real HTTP/API calls in tests
 
 ## Error Message Standard
 
@@ -142,20 +183,15 @@ Text, Number, Boolean, List, Record
 ### Math Keywords
 `plus`, `minus`, `times`, `divided by`, `rounded to <n> places`
 
-## What NOT to Build
+## What NOT to Build (for now)
 
-- Real service connectors (use mocks)
 - Pause/resume
 - Parallel execution
 - Import/include across files
-- Plugin SDK
-- VS Code extension
-- Webhook server
+- Plugin SDK (plugin connector is a stub until validated)
 
-## Architecture Pipeline
+## Repository
 
-```
-.flow file -> Lexer -> Parser -> Semantic Analyzer -> Runtime
-```
-
-Each stage is independent and testable in isolation.
+- **GitHub:** https://github.com/AbrahamOluwa/flow-lang
+- **License:** MIT
+- **Node.js:** >= 18.0.0 (required for built-in fetch)
