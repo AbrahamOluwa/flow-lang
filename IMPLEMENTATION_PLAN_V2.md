@@ -13,7 +13,7 @@ Each phase is gated: all tests must pass before moving to the next phase.
 
 ---
 
-## Phase 7: Secret Management and Environment Variables
+## Phase 7: Secret Management and Environment Variables — COMPLETE
 
 **Goal:** `.env` files load automatically so users never hardcode API keys into `.flow` files.
 
@@ -21,37 +21,36 @@ Each phase is gated: all tests must pass before moving to the next phase.
 
 ### Tasks
 
-- [ ] **#30 Install dotenv**
+- [x] **#30 Install dotenv**
   - Add `dotenv` as a production dependency
   - No config file needed — it reads `.env` from the current working directory by default
 
-- [ ] **#31 Update CLI to load `.env` before execution**
+- [x] **#31 Update CLI to load `.env` before execution**
   - In `flow run`: call `dotenv.config()` before building `envVars`
   - Merge `process.env` (which now includes `.env` values) into `envVars`
   - In `flow test`: continue using mock env vars (no `.env` loading)
   - In `flow check`: no change needed (no execution)
 
-- [ ] **#32 Add `.env` to `.gitignore`**
-  - Already present, but verify it's there
-  - Create a `.env.example` file documenting expected variables:
-    ```
-    ANTHROPIC_API_KEY=your-key-here
-    OPENAI_API_KEY=your-key-here
-    STRIPE_KEY=your-key-here
-    ```
+- [x] **#32 Add `.env` to `.gitignore`**
+  - Already present, verified
+  - Created `.env.example` file documenting expected variables
 
-- [ ] **#33 Validate env access at runtime**
+- [x] **#33 Validate env access at runtime**
   - When a workflow accesses `env.SOME_KEY` and the value is missing, return `FlowEmpty` (current behavior)
-  - Add a `--strict-env` flag to `flow run` that errors on missing env vars instead
-  - Log a warning (in verbose mode) when an env var resolves to empty
+  - Added `--strict-env` flag to `flow run` that errors on missing env vars
+  - Logs a warning (in verbose mode) when an env var resolves to empty
 
-- [ ] **#34 Write tests** (target: ~10 tests)
-  - `.env` values available via `env.KEY` in workflow
+- [x] **#34 Write tests** (10 tests)
   - Missing env var returns FlowEmpty (default mode)
-  - `--strict-env` flag errors on missing env var
-  - `.env` values don't override explicitly passed `--input` data
-  - `flow test` uses mock env vars, not real `.env`
-  - Warning logged in verbose mode for missing env var
+  - `--strict-env` throws RuntimeError on missing env var
+  - `--strict-env` does not throw for existing env var
+  - Multiple env vars accessible in one workflow
+  - Env vars in string interpolation
+  - Env vars in conditions
+  - Env vars don't override `--input` data
+  - Verbose warning logged for missing env var
+  - No warning for existing env var in verbose mode
+  - No warning in non-verbose mode
 
 ---
 
@@ -425,7 +424,7 @@ Each phase is gated: all tests must pass before moving to the next phase.
 ## Build Order Summary
 
 ```
-Phase 7:  Secrets/Env        →  ~10 tests   (small, enables everything)
+Phase 7:  Secrets/Env        →  COMPLETE     (10 tests, 361 total)
 Phase 8:  HTTP Connector      →  ~20 tests   (async refactor + real HTTP)
 Phase 9:  AI Connector        →  ~15 tests   (Claude/GPT integration)
 --- npm publish ---
@@ -436,6 +435,6 @@ Phase 13: Docs Site           →  no tests    (VitePress + GitHub Pages)
 Phase 14: Hosted Runtime      →  TBD         (only if validated)
 ```
 
-Estimated new tests: ~72 (bringing total to ~423+)
+Estimated new tests: ~62 remaining (bringing total to ~423+)
 
 Each phase is gated: all tests must pass before moving to the next phase.

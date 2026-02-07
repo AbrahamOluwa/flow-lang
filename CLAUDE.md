@@ -16,7 +16,7 @@
 | 4. Analyzer | Complete | 41 | Service resolution, variable def-before-use, scope checking, duplicates |
 | 5. Runtime + CLI | Complete | 115 | Environment, evaluator, executor, mock connectors, CLI (check/run/test) |
 | 6. Examples | Complete | 17 (integration) | Three .flow files + end-to-end integration tests |
-| 7. Secrets/Env | Planned | ~10 | `.env` loading, `--strict-env` flag |
+| 7. Secrets/Env | Complete | 10 | dotenv loading, `--strict-env` flag, verbose warnings |
 | 8. HTTP Connector | Planned | ~20 | Async refactor, real HTTP calls, `--mock` flag |
 | 9. AI Connector | Planned | ~15 | Claude/GPT integration via SDKs |
 | npm publish | Planned | — | Publish to npm registry |
@@ -26,7 +26,7 @@
 | 13. Docs Site | Planned | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 351 (phases 1–6) | Target: ~423+ after phases 7–12**
+**Tests passing: 361 (phases 1–7) | Target: ~423+ after phases 8–12**
 
 ## Decisions Log
 

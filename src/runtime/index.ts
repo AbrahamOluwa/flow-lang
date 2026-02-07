@@ -318,6 +318,7 @@ interface ExecutionContext {
     source: string;
     fileName: string;
     verbose: boolean;
+    strictEnv: boolean;
 }
 
 // ============================================================
@@ -392,10 +393,26 @@ function evaluateDotAccess(expr: Expression, ctx: ExecutionContext): FlowValue {
     }
 
     // Traverse the chain
+    const isEnvAccess = rootName === "env";
     for (const part of parts) {
         if (value.type === "record") {
             const field = value.value.get(part);
             if (field === undefined) {
+                if (isEnvAccess && ctx.strictEnv) {
+                    throw new RuntimeError(
+                        `The environment variable "${part}" is not set. Add it to your .env file or set it in your system environment.`,
+                        expr.loc, ctx.source, ctx.fileName
+                    );
+                }
+                if (isEnvAccess && ctx.verbose) {
+                    ctx.log.push({
+                        timestamp: new Date(),
+                        step: ctx.currentStep,
+                        action: "env warning",
+                        result: "skipped",
+                        details: { message: `Environment variable "${part}" is not set` },
+                    });
+                }
                 return EMPTY;
             }
             value = field;
@@ -786,6 +803,7 @@ export interface RuntimeOptions {
     connectors?: Map<string, ServiceConnector>;
     envVars?: Record<string, string>;
     verbose?: boolean;
+    strictEnv?: boolean;
 }
 
 export function execute(program: Program, source: string, options?: RuntimeOptions): ExecutionResult {
@@ -843,6 +861,7 @@ export function execute(program: Program, source: string, options?: RuntimeOptio
         source,
         fileName,
         verbose: options?.verbose ?? false,
+        strictEnv: options?.strictEnv ?? false,
     };
 
     // Execute the workflow

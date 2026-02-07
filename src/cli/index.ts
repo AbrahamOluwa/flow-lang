@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync } from "fs";
+import { config as loadDotenv } from "dotenv";
 import { Command } from "commander";
 import chalk from "chalk";
 import { tokenize } from "../lexer/index.js";
@@ -109,7 +110,10 @@ function checkCommand(filePath: string): void {
     console.log(chalk.green(`No errors found in ${filePath}`));
 }
 
-function runCommand(filePath: string, options: { input?: string; verbose?: boolean }): void {
+function runCommand(filePath: string, options: { input?: string; verbose?: boolean; strictEnv?: boolean }): void {
+    // Load .env file into process.env
+    loadDotenv();
+
     const pipeline = runPipeline(filePath);
 
     if (!pipeline.success) {
@@ -135,6 +139,7 @@ function runCommand(filePath: string, options: { input?: string; verbose?: boole
         input,
         envVars: process.env as Record<string, string>,
         verbose: options.verbose,
+        strictEnv: options.strictEnv,
     });
 
     // Print log
@@ -228,6 +233,7 @@ program
     .description("Execute a .flow file")
     .option("--input <json>", "JSON string with input data for the workflow")
     .option("--verbose", "Show detailed execution log")
+    .option("--strict-env", "Error on missing environment variables instead of using empty")
     .action(runCommand);
 
 program

@@ -408,6 +408,98 @@ describe("Runtime — expression evaluation", () => {
 });
 
 // ============================================================
+// Environment variable handling
+// ============================================================
+
+describe("Runtime — environment variables", () => {
+    it("returns FlowEmpty for missing env var in default mode", () => {
+        const result = runOk('workflow:\n    if env.MISSING is empty:\n        log "empty"', {
+            envVars: {},
+        });
+        expect(logMessages(result)).toEqual(["empty"]);
+    });
+
+    it("throws RuntimeError for missing env var in strict mode", () => {
+        const result = run('workflow:\n    log env.MISSING', {
+            envVars: {},
+            strictEnv: true,
+        });
+        expect(result.result.status).toBe("error");
+        if (result.result.status === "error") {
+            expect(result.result.error.message).toContain("MISSING");
+            expect(result.result.error.message).toContain("not set");
+        }
+    });
+
+    it("does not throw for existing env var in strict mode", () => {
+        const result = runOk('workflow:\n    log env.API_KEY', {
+            envVars: { API_KEY: "my-key" },
+            strictEnv: true,
+        });
+        expect(logMessages(result)).toEqual(["my-key"]);
+    });
+
+    it("accesses multiple env vars in one workflow", () => {
+        const result = runOk(
+            'workflow:\n    log env.KEY_A\n    log env.KEY_B\n    log env.KEY_C',
+            { envVars: { KEY_A: "alpha", KEY_B: "bravo", KEY_C: "charlie" } },
+        );
+        expect(logMessages(result)).toEqual(["alpha", "bravo", "charlie"]);
+    });
+
+    it("uses env vars in string interpolation", () => {
+        const result = runOk('workflow:\n    log "key is {env.API_KEY}"', {
+            envVars: { API_KEY: "abc123" },
+        });
+        expect(logMessages(result)).toEqual(["key is abc123"]);
+    });
+
+    it("uses env vars in conditions", () => {
+        const result = runOk(
+            'workflow:\n    if env.MODE is "production":\n        log "prod"\n    otherwise:\n        log "dev"',
+            { envVars: { MODE: "production" } },
+        );
+        expect(logMessages(result)).toEqual(["prod"]);
+    });
+
+    it("env vars do not override input data", () => {
+        const result = runOk(
+            'workflow:\n    log order.name\n    log env.NAME',
+            { input: { order: { name: "from-input" } }, envVars: { NAME: "from-env" } },
+        );
+        expect(logMessages(result)).toEqual(["from-input", "from-env"]);
+    });
+
+    it("logs warning for missing env var in verbose mode", () => {
+        const result = runOk('workflow:\n    log env.MISSING', {
+            envVars: {},
+            verbose: true,
+        });
+        const warnings = result.log.filter(e => e.action === "env warning");
+        expect(warnings.length).toBe(1);
+        expect(warnings[0].details["message"]).toContain("MISSING");
+    });
+
+    it("does not log warning for existing env var in verbose mode", () => {
+        const result = runOk('workflow:\n    log env.EXISTS', {
+            envVars: { EXISTS: "yes" },
+            verbose: true,
+        });
+        const warnings = result.log.filter(e => e.action === "env warning");
+        expect(warnings.length).toBe(0);
+    });
+
+    it("does not log warning in non-verbose mode", () => {
+        const result = runOk('workflow:\n    log env.MISSING', {
+            envVars: {},
+            verbose: false,
+        });
+        const warnings = result.log.filter(e => e.action === "env warning");
+        expect(warnings.length).toBe(0);
+    });
+});
+
+// ============================================================
 // Statement execution
 // ============================================================
 
