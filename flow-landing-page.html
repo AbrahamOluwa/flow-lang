@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow — Where business decisions live, run, and are reviewed</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0A0A0B;
+    --bg-secondary: #111113;
+    --bg-tertiary: #18181B;
+    --bg-card: #1C1C1F;
+    --border: #2A2A2E;
+    --border-light: #3A3A3E;
+    --text-primary: #F4F4F5;
+    --text-secondary: #A1A1AA;
+    --text-muted: #71717A;
+    --accent: #22D3EE;
+    --accent-dim: #0E7490;
+    --accent-glow: rgba(34, 211, 238, 0.15);
+    --green: #4ADE80;
+    --green-dim: rgba(74, 222, 128, 0.15);
+    --amber: #FBBF24;
+    --amber-dim: rgba(251, 191, 36, 0.15);
+    --red: #F87171;
+    --red-dim: rgba(248, 113, 113, 0.15);
+    --purple: #A78BFA;
+    --purple-dim: rgba(167, 139, 250, 0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ===== NOISE TEXTURE OVERLAY ===== */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ===== NAVIGATION ===== */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 20px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(10, 10, 11, 0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 1.3rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    letter-spacing: -0.5px;
+  }
+
+  .nav-logo span { color: var(--accent); }
+
+  .nav-links { display: flex; gap: 32px; align-items: center; }
+
+  .nav-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--text-primary); }
+
+  .nav-cta {
+    background: var(--accent) !important;
+    color: var(--bg-primary) !important;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-weight: 600 !important;
+    transition: opacity 0.2s !important;
+  }
+
+  .nav-cta:hover { opacity: 0.9; }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 140px 40px 80px;
+    position: relative;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    padding: 6px 16px;
+    border-radius: 100px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    width: fit-content;
+    margin-bottom: 32px;
+    animation: fadeInUp 0.8s ease both;
+  }
+
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .hero h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2.8rem, 6vw, 5rem);
+    line-height: 1.1;
+    letter-spacing: -1.5px;
+    max-width: 800px;
+    margin-bottom: 28px;
+    animation: fadeInUp 0.8s ease 0.1s both;
+  }
+
+  .hero h1 .highlight {
+    background: linear-gradient(135deg, var(--accent), #818CF8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    max-width: 580px;
+    line-height: 1.8;
+    margin-bottom: 48px;
+    animation: fadeInUp 0.8s ease 0.2s both;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    animation: fadeInUp 0.8s ease 0.3s both;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg-primary);
+    padding: 14px 32px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 30px var(--accent-glow);
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    padding: 14px 32px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    border: 1px solid var(--border-light);
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--text-muted);
+    background: var(--bg-tertiary);
+  }
+
+  .hero-install {
+    margin-top: 32px;
+    animation: fadeInUp 0.8s ease 0.4s both;
+  }
+
+  .install-cmd {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+
+  .install-cmd .prompt { color: var(--accent); }
+
+  /* ===== HERO CODE PREVIEW ===== */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 40px 120px;
+  }
+
+  /* ===== THE PROBLEM SECTION ===== */
+  .problem-section {
+    padding: 120px 40px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .problem-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+
+  .problem-inner h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.2;
+    margin-bottom: 24px;
+    letter-spacing: -0.5px;
+    max-width: 700px;
+  }
+
+  .problem-inner .lead {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin-bottom: 64px;
+    line-height: 1.8;
+  }
+
+  .fragmentation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+  }
+
+  .frag-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .frag-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .frag-card:nth-child(1)::before { background: var(--red); }
+  .frag-card:nth-child(2)::before { background: var(--amber); }
+  .frag-card:nth-child(3)::before { background: var(--purple); }
+  .frag-card:nth-child(4)::before { background: var(--red); }
+
+  .frag-card:hover {
+    border-color: var(--border-light);
+    transform: translateY(-2px);
+  }
+
+  .frag-icon {
+    font-size: 1.6rem;
+    margin-bottom: 16px;
+  }
+
+  .frag-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .frag-card p {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* ===== SOLUTION / CODE SECTION ===== */
+  .solution-section {
+    padding: 120px 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .solution-header {
+    text-align: center;
+    margin-bottom: 72px;
+  }
+
+  .solution-header h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+  }
+
+  .solution-header p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.8;
+  }
+
+  .code-showcase {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  .code-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .code-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-tertiary);
+  }
+
+  .code-panel-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+
+  .code-panel-dot.r { background: #EF4444; }
+  .code-panel-dot.y { background: #EAB308; }
+  .code-panel-dot.g { background: #22C55E; }
+
+  .code-panel-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-left: 8px;
+  }
+
+  .code-panel pre {
+    padding: 24px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    color: var(--text-secondary);
+  }
+
+  .code-panel pre .kw { color: var(--accent); }
+  .code-panel pre .str { color: var(--green); }
+  .code-panel pre .cm { color: var(--text-muted); }
+  .code-panel pre .svc { color: var(--purple); }
+  .code-panel pre .num { color: var(--amber); }
+  .code-panel pre .fn { color: #F472B6; }
+
+  .code-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--accent);
+  }
+
+  /* ===== BEFORE/AFTER COMPARISON ===== */
+  .comparison-label {
+    text-align: center;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+  }
+
+  .comparison-label.before {
+    color: var(--red);
+    background: var(--red-dim);
+    border-radius: 12px 12px 0 0;
+  }
+
+  .comparison-label.after {
+    color: var(--green);
+    background: var(--green-dim);
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* ===== WHAT FLOW IS SECTION ===== */
+  .what-section {
+    padding: 120px 40px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .what-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .what-inner h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+  }
+
+  .what-inner > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin-bottom: 64px;
+    line-height: 1.8;
+  }
+
+  .pillars-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
+
+  .pillar {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 24px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+
+  .pillar:hover {
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 40px var(--accent-glow);
+    transform: translateY(-3px);
+  }
+
+  .pillar-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin: 0 auto 20px;
+  }
+
+  .pillar:nth-child(1) .pillar-icon { background: var(--accent-glow); }
+  .pillar:nth-child(2) .pillar-icon { background: var(--green-dim); }
+  .pillar:nth-child(3) .pillar-icon { background: var(--amber-dim); }
+  .pillar:nth-child(4) .pillar-icon { background: var(--purple-dim); }
+
+  .pillar h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .pillar p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* ===== HOW TEAMS USE IT ===== */
+  .teams-section {
+    padding: 120px 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .teams-section h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+  }
+
+  .teams-section > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin-bottom: 64px;
+    line-height: 1.8;
+  }
+
+  .teams-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  .team-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 36px 28px;
+    transition: all 0.3s;
+  }
+
+  .team-card:hover {
+    border-color: var(--border-light);
+    transform: translateY(-2px);
+  }
+
+  .team-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 16px;
+  }
+
+  .team-card:nth-child(1) .team-role { color: var(--accent); }
+  .team-card:nth-child(2) .team-role { color: var(--green); }
+  .team-card:nth-child(3) .team-role { color: var(--amber); }
+
+  .team-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .team-card p {
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+
+  /* ===== TERMINAL DEMO ===== */
+  .demo-section {
+    padding: 120px 40px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .demo-inner {
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .demo-inner h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+  }
+
+  .demo-inner > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    margin-bottom: 48px;
+    line-height: 1.8;
+  }
+
+  .terminal {
+    background: #0C0C0E;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    text-align: left;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.4);
+  }
+
+  .terminal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-header .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+  }
+
+  .terminal-body {
+    padding: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 2;
+  }
+
+  .terminal-body .prompt-line { color: var(--text-muted); }
+  .terminal-body .prompt-line .cmd { color: var(--text-primary); }
+  .terminal-body .output { color: var(--text-secondary); }
+  .terminal-body .success { color: var(--green); }
+  .terminal-body .info { color: var(--accent); }
+  .terminal-body .step-label { color: var(--amber); }
+
+  /* ===== CTA SECTION ===== */
+  .cta-section {
+    padding: 160px 40px;
+    text-align: center;
+    position: relative;
+  }
+
+  .cta-section::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cta-section h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2.2rem, 5vw, 3.5rem);
+    letter-spacing: -1px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+
+  .cta-section > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 500px;
+    margin: 0 auto 48px;
+    line-height: 1.8;
+    position: relative;
+  }
+
+  .cta-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    position: relative;
+    flex-wrap: wrap;
+  }
+
+  .cta-install {
+    margin-top: 40px;
+    position: relative;
+  }
+
+  /* ===== FOOTER ===== */
+  footer {
+    padding: 48px 40px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .footer-left {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 24px;
+  }
+
+  .footer-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover { color: var(--text-primary); }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .fade-in {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 900px) {
+    .code-showcase { grid-template-columns: 1fr; }
+    .pillars-grid { grid-template-columns: repeat(2, 1fr); }
+    .teams-grid { grid-template-columns: 1fr; }
+    .fragmentation-grid { grid-template-columns: repeat(2, 1fr); }
+    nav { padding: 16px 20px; }
+    .nav-links { gap: 16px; }
+    .nav-links a:not(.nav-cta) { display: none; }
+    .hero { padding: 120px 20px 60px; }
+    .problem-section, .solution-section, .what-section,
+    .teams-section, .demo-section, .cta-section { padding: 80px 20px; }
+    footer { flex-direction: column; gap: 20px; text-align: center; }
+  }
+
+  @media (max-width: 600px) {
+    .pillars-grid { grid-template-columns: 1fr; }
+    .fragmentation-grid { grid-template-columns: 1fr; }
+    .hero-actions { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== NAVIGATION ===== -->
+<nav>
+  <a href="#" class="nav-logo"><span>⌘</span> flow</a>
+  <div class="nav-links">
+    <a href="#problem">Problem</a>
+    <a href="#solution">Solution</a>
+    <a href="#teams">Teams</a>
+    <a href="https://github.com/AbrahamOluwa/flow-lang" class="nav-cta">Star on GitHub →</a>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    Open source · MIT license
+  </div>
+
+  <h1>Business rules that <span class="highlight">run, not rot</span></h1>
+
+  <p class="hero-sub">
+    Flow is a system for writing, reviewing, and running business decisions as plain text. One file. Executable. Versioned. Auditable.
+  </p>
+
+  <div class="hero-actions">
+    <a href="https://github.com/AbrahamOluwa/flow-lang" class="btn-primary">
+      Get started →
+    </a>
+    <a href="#solution" class="btn-secondary">
+      See it in action
+    </a>
+  </div>
+
+  <div class="hero-install">
+    <div class="install-cmd">
+      <span class="prompt">$</span> npm install -g flow-lang
+    </div>
+  </div>
+</section>
+
+<!-- ===== PROBLEM ===== -->
+<section class="problem-section" id="problem">
+  <div class="problem-inner">
+    <div class="section-label fade-in">The problem</div>
+    <h2 class="fade-in">Business logic lives in too many places</h2>
+    <p class="lead fade-in">
+      Documents say one thing. Code does another. The real rules live in someone's head. When that person leaves, the rules leave with them.
+    </p>
+
+    <div class="fragmentation-grid">
+      <div class="frag-card fade-in">
+        <div class="frag-icon">📄</div>
+        <h3>The document</h3>
+        <p>A Notion doc describes the process. It was accurate six months ago. Nobody has updated it since the last three changes went live.</p>
+      </div>
+      <div class="frag-card fade-in">
+        <div class="frag-icon">🧑‍💻</div>
+        <h3>The code</h3>
+        <p>An engineer translated the doc into Python. It's been patched twice. The patches aren't in the doc. Only the engineer knows what it actually does.</p>
+      </div>
+      <div class="frag-card fade-in">
+        <div class="frag-icon">💬</div>
+        <h3>The Slack message</h3>
+        <p>The ops lead clarified an edge case in a thread last quarter. It never made it into the doc or the code. It lives in Slack search.</p>
+      </div>
+      <div class="frag-card fade-in">
+        <div class="frag-icon">🧠</div>
+        <h3>The person</h3>
+        <p>One senior analyst just knows how it really works. They've been here since the beginning. Nobody has written it down.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== SOLUTION ===== -->
+<section class="solution-section" id="solution">
+  <div class="solution-header fade-in">
+    <div class="section-label">The solution</div>
+    <h2>The document becomes the execution</h2>
+    <p>
+      A <code style="background:var(--bg-tertiary);padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.9em;">.flow</code> file is simultaneously a process document anyone can read and an executable program that runs the same way every time.
+    </p>
+  </div>
+
+  <div class="code-showcase">
+    <!-- BEFORE -->
+    <div>
+      <div class="comparison-label before">❌ BEFORE — Logic scattered everywhere</div>
+      <div class="code-panel" style="border-radius: 0 0 12px 12px;">
+        <pre>
+<span class="cm"># The Notion doc says:</span>
+<span class="str">"Check credit score. If below 300, reject."</span>
+
+<span class="cm"># The Python code says:</span>
+<span class="kw">if</span> resp.json()[<span class="str">"data"</span>][<span class="str">"score"</span>] < <span class="num">350</span>:
+    <span class="cm"># was 300, changed in hotfix #4127</span>
+    <span class="fn">raise</span> Exception(<span class="str">"rejected"</span>)
+
+<span class="cm"># The Slack thread says:</span>
+<span class="str">"Actually we changed it to 350 last month
+ but forgot to update the doc"</span>
+
+<span class="cm"># Nobody knows which is correct.</span></pre>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div>
+      <div class="comparison-label after">✓ AFTER — One source of truth</div>
+      <div class="code-panel" style="border-radius: 0 0 12px 12px;">
+        <pre>
+<span class="kw">services:</span>
+    CreditBureau <span class="kw">is an API at</span> <span class="str">"https://api.bureau.com"</span>
+        <span class="kw">with headers:</span>
+            Authorization: <span class="str">"Bearer {env.BUREAU_KEY}"</span>
+
+<span class="kw">step</span> Check Credit:
+    fetch report <span class="kw">using</span> <span class="svc">CreditBureau</span>
+        <span class="kw">with</span> bvn application.bvn
+        <span class="kw">save the result as</span> credit
+        <span class="kw">save the status as</span> status-code
+
+    <span class="kw">if</span> credit.score <span class="kw">is below</span> <span class="num">350</span>:
+        <span class="kw">reject with</span> <span class="str">"Credit score too low"</span>
+
+<span class="cm"># This file IS the rule.</span>
+<span class="cm"># It runs. It's versioned. It's reviewable.</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== WHAT FLOW IS ===== -->
+<section class="what-section">
+  <div class="what-inner">
+    <div class="section-label fade-in">What a .flow file is</div>
+    <h2 class="fade-in">Four things. One file.</h2>
+    <p class="fade-in">
+      Today these are four different systems. Flow makes them one artifact.
+    </p>
+
+    <div class="pillars-grid">
+      <div class="pillar fade-in">
+        <div class="pillar-icon">📖</div>
+        <h3>Process document</h3>
+        <p>Anyone on the team can read and understand the business logic. No code literacy required.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-icon">⚡</div>
+        <h3>Executable program</h3>
+        <p>Calls APIs, invokes AI agents, makes decisions, sends notifications. Runs identically every time.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-icon">🔀</div>
+        <h3>Versioned artifact</h3>
+        <p>Lives in Git. Clean, reviewable diffs. "Changed threshold from 300 to 350" — one line, reviewed, merged.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-icon">🔍</div>
+        <h3>Audit trail</h3>
+        <p>Every execution logged with full context. Hand the file to an auditor. They can read it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== HOW TEAMS USE IT ===== -->
+<section class="teams-section" id="teams">
+  <div class="section-label fade-in">How teams use flow</div>
+  <h2 class="fade-in">Each team does what they're best at</h2>
+  <p class="fade-in">
+    Flow doesn't replace engineers. It frees them. The ops team owns the logic. Engineers own the infrastructure.
+  </p>
+
+  <div class="teams-grid">
+    <div class="team-card fade-in">
+      <div class="team-role">Operations</div>
+      <h3>Write and own the rules</h3>
+      <p>Ops teams write and maintain <code>.flow</code> files. When a process changes, they change the file. No Jira ticket. No waiting for a sprint. The people who understand the process own the process.</p>
+    </div>
+    <div class="team-card fade-in">
+      <div class="team-role">Engineering</div>
+      <h3>Build services, review logic</h3>
+      <p>Engineers build the APIs and connectors that Flow calls. They review <code>.flow</code> files in pull requests like any other code. They stop being bottlenecked by business logic changes.</p>
+    </div>
+    <div class="team-card fade-in">
+      <div class="team-role">Compliance</div>
+      <h3>Read the actual rules</h3>
+      <p>When an auditor asks "how do you make this decision?" — hand them the <code>.flow</code> file. They can read it. Try handing them 400 lines of Python.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TERMINAL DEMO ===== -->
+<section class="demo-section">
+  <div class="demo-inner">
+    <div class="section-label fade-in">See it run</div>
+    <h2 class="fade-in">From file to execution in seconds</h2>
+    <p class="fade-in">
+      Write a <code style="background:var(--bg-tertiary);padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.9em;">.flow</code> file. Check it. Run it. That's it.
+    </p>
+
+    <div class="terminal fade-in">
+      <div class="terminal-header">
+        <div class="dot" style="background:#EF4444"></div>
+        <div class="dot" style="background:#EAB308"></div>
+        <div class="dot" style="background:#22C55E"></div>
+      </div>
+      <div class="terminal-body">
+        <div class="prompt-line"><span class="info">$</span> <span class="cmd">flow check loan-review.flow</span></div>
+        <div class="output"><span class="success">✓</span> No errors found in loan-review.flow</div>
+        <br>
+        <div class="prompt-line"><span class="info">$</span> <span class="cmd">flow run loan-review.flow --input '{"application": ...}'</span></div>
+        <br>
+        <div class="output"><span class="step-label">▸ Step: Check Credit</span></div>
+        <div class="output">&nbsp;&nbsp;↳ Called CreditBureau API (Bearer auth)</div>
+        <div class="output">&nbsp;&nbsp;↳ Status: 200 — score: 720</div>
+        <br>
+        <div class="output"><span class="step-label">▸ Step: Assess Risk</span></div>
+        <div class="output">&nbsp;&nbsp;↳ AI assessment: "approved" (confidence: 0.87)</div>
+        <br>
+        <div class="output"><span class="step-label">▸ Step: Decide</span></div>
+        <div class="output">&nbsp;&nbsp;↳ Sent approval via SendGrid (status: 202)</div>
+        <div class="output">&nbsp;&nbsp;↳ Notified #sales on Slack webhook</div>
+        <br>
+        <div class="output"><span class="success">✓ Workflow completed</span> — status: approved</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CTA ===== -->
+<section class="cta-section">
+  <div class="section-label fade-in">Get started</div>
+  <h2 class="fade-in">Give your business logic<br>a single source of truth</h2>
+  <p class="fade-in">
+    If it's in Flow, it's a real rule.<br>If it's not, it's just a suggestion.
+  </p>
+
+  <div class="cta-actions fade-in">
+    <a href="https://github.com/AbrahamOluwa/flow-lang" class="btn-primary">
+      Star on GitHub →
+    </a>
+    <a href="https://abrahamoluwa.github.io/flow-lang/" class="btn-secondary">
+      Read the docs
+    </a>
+  </div>
+
+  <div class="cta-install fade-in">
+    <div class="install-cmd">
+      <span class="prompt">$</span> npm install -g flow-lang
+    </div>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div class="footer-left">
+    <span style="color:var(--accent)">⌘</span> flow · Open source · MIT license
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/AbrahamOluwa/flow-lang">GitHub</a>
+    <a href="https://abrahamoluwa.github.io/flow-lang/">Documentation</a>
+    <a href="https://www.npmjs.com/package/flow-lang">npm</a>
+  </div>
+</footer>
+
+<!-- ===== SCROLL ANIMATIONS ===== -->
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, index) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => {
+          entry.target.classList.add('visible');
+        }, index * 80);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

@@ -41,6 +41,54 @@ if followers is above 1000:
     set popularity to "star"
 ```
 
+### [Stripe Checkout](/examples/stripe-checkout)
+
+Processes a payment through Stripe's API with authenticated headers, status checking, retry logic, and Slack notification.
+
+```txt
+services:
+    Stripe is an API at "https://api.stripe.com/v1"
+        with headers:
+            Authorization: "Bearer {env.STRIPE_SECRET_KEY}"
+
+step CreateCharge:
+    create charge using Stripe with amount amount and currency currency
+        save the result as charge
+        save the status as status-code
+        on failure:
+            retry 3 times waiting 5 seconds
+```
+
+### [Slack Notification](/examples/slack-notification)
+
+Sends a formatted deployment notification to Slack with conditional message building based on deploy status.
+
+```txt
+step BuildMessage:
+    if deploy-status is "success":
+        set message to "Deployed {service-name} v{version} successfully"
+    otherwise if deploy-status is "rollback":
+        set message to "Rolled back {service-name} to v{version}"
+    otherwise:
+        set message to "Deployment of {service-name} v{version} failed"
+```
+
+### [SendGrid Email](/examples/sendgrid-email)
+
+Sends a transactional email through SendGrid with authentication, input validation, and delivery status verification.
+
+```txt
+services:
+    SendGrid is an API at "https://api.sendgrid.com/v3"
+        with headers:
+            Authorization: "Bearer {env.SENDGRID_API_KEY}"
+            Content-Type: "application/json"
+
+step SendEmail:
+    send email using SendGrid at "/mail/send" with to recipient and subject subject
+        save the status as status-code
+```
+
 ## Running examples
 
 ### With mock services

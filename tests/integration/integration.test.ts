@@ -376,3 +376,112 @@ describe("Integration — response access", () => {
         });
     });
 });
+
+// ============================================================
+// Stripe Checkout
+// ============================================================
+
+describe("Integration — stripe-checkout.flow", () => {
+    const source = readExample("stripe-checkout.flow");
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "stripe-checkout.flow");
+    });
+
+    it("completes successfully with spy connectors", async () => {
+        const spyAPI: ServiceConnector = {
+            async call() {
+                return { value: record({ id: text("ch_123") }), status: 200 };
+            }
+        };
+        const spyWebhook: ServiceConnector = {
+            async call() {
+                return { value: record({ ok: text("true") }) };
+            }
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("Stripe", spyAPI);
+        connectors.set("SlackNotifier", spyWebhook);
+
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        const result = await execute(program, source, {
+            connectors,
+            input: {
+                customer_email: "ada@example.com",
+                amount: 5000,
+                currency: "usd",
+            },
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["status"]).toEqual(text("paid"));
+            expect(result.result.outputs["email"]).toEqual(text("ada@example.com"));
+        }
+    });
+});
+
+// ============================================================
+// Slack Notification
+// ============================================================
+
+describe("Integration — slack-notification.flow", () => {
+    const source = readExample("slack-notification.flow");
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "slack-notification.flow");
+    });
+
+    it("completes with success notification", async () => {
+        const result = await runFile(source, {
+            event: "deploy",
+            service: "api-v2",
+            version: "1.4.0",
+            status: "success",
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["status"]).toEqual(text("notified"));
+        }
+        const logs = logMessages(result);
+        expect(logs).toContain("Notification sent: Deployed api-v2 v1.4.0 successfully");
+    });
+});
+
+// ============================================================
+// SendGrid Email
+// ============================================================
+
+describe("Integration — sendgrid-email.flow", () => {
+    const source = readExample("sendgrid-email.flow");
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "sendgrid-email.flow");
+    });
+
+    it("completes successfully with valid input", async () => {
+        const result = await runFile(source, {
+            to: "ada@example.com",
+            subject: "Welcome!",
+            body: "Thanks for signing up.",
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["status"]).toEqual(text("sent"));
+            expect(result.result.outputs["recipient"]).toEqual(text("ada@example.com"));
+            expect(result.result.outputs["subject"]).toEqual(text("Welcome!"));
+        }
+    });
+
+    it("rejects when recipient is empty", async () => {
+        const result = await runFile(source, {
+            to: "",
+            subject: "Welcome!",
+            body: "Thanks for signing up.",
+        });
+        expect(result.result.status).toBe("rejected");
+        if (result.result.status === "rejected") {
+            expect(result.result.message).toContain("Recipient");
+        }
+    });
+});

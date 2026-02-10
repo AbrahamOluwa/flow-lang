@@ -1,0 +1,53 @@
+# SendGrid Email
+# Sends a transactional email through the SendGrid API with
+# authentication, status checking, and retry on failure.
+#
+# Usage:
+#   flow run examples/sendgrid-email.flow --input '{"to": "ada@example.com", "subject": "Welcome!", "body": "Thanks for signing up."}' --mock
+#
+# Required env vars (for real execution):
+#   SENDGRID_API_KEY — Your SendGrid API key
+
+config:
+    name: "SendGrid Email"
+    version: 1
+
+services:
+    SendGrid is an API at "https://api.sendgrid.com/v3"
+        with headers:
+            Authorization: "Bearer {env.SENDGRID_API_KEY}"
+            Content-Type: "application/json"
+
+workflow:
+    trigger: when an email needs to be sent
+
+    set recipient to request.to
+    set subject to request.subject
+    set body to request.body
+    log "Sending email to {recipient}: {subject}"
+
+    step ValidateInput:
+        if recipient is empty:
+            reject with "Recipient email address is required"
+        if subject is empty:
+            reject with "Email subject is required"
+
+    step SendEmail:
+        send email using SendGrid at "/mail/send" with to recipient and subject subject and content body
+            save the result as result
+            save the status as status-code
+            on failure:
+                retry 2 times waiting 10 seconds
+                if still failing:
+                    log "SendGrid is unreachable after retries"
+                    reject with "Could not send email. Please try again later."
+
+    step VerifyDelivery:
+        if status-code is 202:
+            log "Email accepted for delivery"
+        otherwise if status-code is 200:
+            log "Email sent successfully"
+        otherwise:
+            log "Unexpected response status: {status-code}"
+
+    complete with status "sent" and recipient recipient and subject subject
