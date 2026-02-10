@@ -11,6 +11,8 @@ config:
 
 services:
     Inventory is an API at "https://inventory.example.com/api"
+        with headers:
+            Authorization: "Bearer {env.INVENTORY_KEY}"
     Stripe is a plugin "stripe-payments"
     Notifier is an AI using "openai/gpt-4o"
 
@@ -32,6 +34,7 @@ workflow:
 
     step ChargePayment:
         charge payment using Stripe with amount total and currency "usd"
+            save the status as payment-status
             on failure:
                 retry 3 times waiting 5 seconds
                 if still failing:
@@ -71,14 +74,17 @@ flow run my-workflow.flow --input '{"order": {"id": "123", "items": ["A", "B"], 
 ## CLI Commands
 
 ```bash
-flow check <file>                    # Parse and validate (no execution)
-flow run <file>                      # Execute a .flow file
-flow run <file> --input '<json>'     # Pass trigger data as JSON
-flow run <file> --verbose            # Show detailed execution log
-flow run <file> --mock               # Use mock services instead of real APIs
-flow run <file> --strict-env         # Error on missing environment variables
-flow test <file>                     # Dry-run with mock services
-flow test <file> --verbose           # Mock dry-run with execution log
+flow check <file>                          # Parse and validate (no execution)
+flow run <file>                            # Execute a .flow file
+flow run <file> --input '<json>'           # Pass trigger data as JSON
+flow run <file> --input-file data.csv      # Load input from JSON, CSV, or Excel file
+flow run <file> --verbose                  # Show detailed execution log
+flow run <file> --mock                     # Use mock services instead of real APIs
+flow run <file> --strict-env               # Error on missing environment variables
+flow test <file>                           # Dry-run with mock services
+flow test <file> --verbose                 # Mock dry-run with execution log
+flow serve <file-or-dir>                   # Start webhook server
+flow serve <file-or-dir> --port 4000       # Custom port (default: 3000)
 ```
 
 ## Language Overview
@@ -93,6 +99,9 @@ Call real REST APIs, AI models, webhooks, or plugins:
 verify email using EmailVerifier with address email
 get user using GitHub at "/users/octocat"
 charge payment using Stripe with amount total and currency "usd"
+    save the result as payment
+    save the status as status-code
+    save the response headers as resp-headers
 ```
 
 ### Conditions
@@ -189,6 +198,9 @@ Flow connects to real external services:
 services:
     # REST APIs — verb inference maps English to HTTP methods
     GitHub is an API at "https://api.github.com"
+        with headers:
+            Authorization: "token {env.GITHUB_TOKEN}"
+            Accept: "application/vnd.github.v3+json"
 
     # AI agents — OpenAI and Anthropic supported
     Analyst is an AI using "openai/gpt-4o"
@@ -201,6 +213,33 @@ services:
     Stripe is a plugin "stripe-payments"
 ```
 
+### HTTP Headers
+
+Services can include custom headers for authentication and other needs. Header values support string interpolation with environment variables:
+
+```
+services:
+    Stripe is an API at "https://api.stripe.com/v1"
+        with headers:
+            Authorization: "Bearer {env.STRIPE_SECRET_KEY}"
+            Content-Type: "application/x-www-form-urlencoded"
+```
+
+### Response Metadata
+
+After a service call, you can inspect the HTTP status code and response headers:
+
+```
+get user using GitHub at "/users/{username}"
+    save the result as user
+    save the status as status-code
+    save the response headers as resp-headers
+
+if status-code is 200:
+    log "Found user: {user.name}"
+    log "Rate limit remaining: {resp-headers.x-ratelimit-remaining}"
+```
+
 ### API Keys
 
 Create a `.env` file in your project root:
@@ -208,6 +247,7 @@ Create a `.env` file in your project root:
 ```
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+GITHUB_TOKEN=ghp_...
 ```
 
 Flow loads `.env` automatically via dotenv. Access any environment variable with `env.VARIABLE_NAME`.
@@ -238,6 +278,7 @@ The `examples/` directory has complete workflows:
 - **email-verification.flow** — Validates a submitted email address
 - **order-processing.flow** — Inventory check, payment, and confirmation
 - **loan-application.flow** — Full pipeline: identity, credit, AI risk assessment, fraud screening, and approval
+- **github-api.flow** — Authenticated GitHub API calls with custom headers
 
 ## Contributing
 
@@ -249,7 +290,7 @@ npm run build
 npm run test
 ```
 
-The test suite uses [Vitest](https://vitest.dev/) with 389 tests across all pipeline stages.
+The test suite uses [Vitest](https://vitest.dev/) with 449 tests across all pipeline stages.
 
 ## License
 

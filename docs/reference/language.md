@@ -46,14 +46,32 @@ Declare external services:
 ```txt
 services:
     GitHub is an API at "https://api.github.com"
+        with headers:
+            Authorization: "token {env.GITHUB_TOKEN}"
     Stripe is a plugin "stripe-payments"
     Analyst is an AI using "openai/gpt-4o"
+    SlackNotifier is a webhook at "https://hooks.slack.com/..."
 ```
 
-Three service types:
+Four service types:
 - **API** — REST endpoints: `<Name> is an API at "<url>"`
+- **Webhook** — POST endpoints: `<Name> is a webhook at "<url>"`
 - **Plugin** — Named plugins: `<Name> is a plugin "<plugin-name>"`
 - **AI** — AI models: `<Name> is an AI using "<provider/model>"`
+
+### Custom headers
+
+API and webhook services can include custom HTTP headers:
+
+```txt
+services:
+    Stripe is an API at "https://api.stripe.com/v1"
+        with headers:
+            Authorization: "Bearer {env.STRIPE_SECRET_KEY}"
+            Content-Type: "application/x-www-form-urlencoded"
+```
+
+Header values support string interpolation with `{env.VARIABLE_NAME}`. Headers are sent with every request to that service.
 
 ## Workflow block
 
@@ -139,6 +157,22 @@ get data using MyAPI at "/endpoint"
     save the result as data
 ```
 
+### Saving response metadata
+
+Capture the HTTP status code and response headers:
+
+```txt
+create item using API with name "widget"
+    save the result as item
+    save the status as status-code
+    save the response headers as resp-headers
+```
+
+- `save the status as` — stores the HTTP status code as a number (e.g., `200`, `201`)
+- `save the response headers as` — stores response headers as a record of text values
+
+All three save clauses can be used together. When using mock services, status and headers will be `empty`.
+
 ### Error handling
 
 ```txt
@@ -147,6 +181,16 @@ charge payment using Stripe with amount total
         retry 3 times waiting 5 seconds
         if still failing:
             reject with "Payment failed"
+```
+
+The `waiting` duration is a real pause between retry attempts. You can use `seconds` or `minutes`:
+
+```txt
+    on failure:
+        retry 2 times waiting 30 seconds
+
+    on failure:
+        retry 3 times waiting 1 minutes
 ```
 
 ## AI requests
