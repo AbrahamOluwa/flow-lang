@@ -197,8 +197,14 @@ export class Environment {
 // Service Connectors
 // ============================================================
 
+export interface ServiceResponse {
+    value: FlowValue;
+    status?: number;
+    headers?: Record<string, string>;
+}
+
 export interface ServiceConnector {
-    call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue>;
+    call(verb: string, description: string, params: Map<string, FlowValue>, path?: string, headers?: Record<string, string>): Promise<ServiceResponse>;
 }
 
 export interface MockConnectorOptions {
@@ -213,15 +219,17 @@ export class MockAPIConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<ServiceResponse> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`Service call failed: ${verb} ${description} (mock failure)`);
         }
-        return record({
-            status: text("ok"),
-            data: text(`mock response for: ${verb} ${description}`),
-        });
+        return {
+            value: record({
+                status: text("ok"),
+                data: text(`mock response for: ${verb} ${description}`),
+            }),
+        };
     }
 }
 
@@ -233,15 +241,17 @@ export class MockAIConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    async call(_verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(_verb: string, description: string, _params: Map<string, FlowValue>): Promise<ServiceResponse> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`AI service failed: ${description} (mock failure)`);
         }
-        return record({
-            result: text(`mock AI response for: ${description}`),
-            confidence: num(0.85),
-        });
+        return {
+            value: record({
+                result: text(`mock AI response for: ${description}`),
+                confidence: num(0.85),
+            }),
+        };
     }
 }
 
@@ -253,15 +263,17 @@ export class MockPluginConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<ServiceResponse> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`Plugin failed: ${verb} ${description} (mock failure)`);
         }
-        return record({
-            status: text("ok"),
-            data: text(`mock plugin response for: ${verb} ${description}`),
-        });
+        return {
+            value: record({
+                status: text("ok"),
+                data: text(`mock plugin response for: ${verb} ${description}`),
+            }),
+        };
     }
 }
 
@@ -273,14 +285,16 @@ export class MockWebhookConnector implements ServiceConnector {
         this.failCount = options?.failCount ?? 0;
     }
 
-    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<ServiceResponse> {
         this.callCount++;
         if (this.callCount <= this.failCount) {
             throw new Error(`Webhook failed: ${verb} ${description} (mock failure)`);
         }
-        return record({
-            status: text("ok"),
-        });
+        return {
+            value: record({
+                status: text("ok"),
+            }),
+        };
     }
 }
 
@@ -320,7 +334,7 @@ export class HTTPAPIConnector implements ServiceConnector {
         this.baseUrl = baseUrl.replace(/\/$/, ""); // strip trailing slash
     }
 
-    async call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue> {
+    async call(verb: string, description: string, params: Map<string, FlowValue>, path?: string, headers?: Record<string, string>): Promise<ServiceResponse> {
         const method = inferHTTPMethod(verb);
         let url = this.baseUrl;
 
@@ -351,7 +365,7 @@ export class HTTPAPIConnector implements ServiceConnector {
                 }
                 response = await fetch(url, {
                     method,
-                    headers: { "Accept": "application/json" },
+                    headers: { "Accept": "application/json", ...headers },
                     signal: controller.signal,
                 });
             } else {
@@ -361,6 +375,7 @@ export class HTTPAPIConnector implements ServiceConnector {
                     headers: {
                         "Content-Type": "application/json",
                         "Accept": "application/json",
+                        ...headers,
                     },
                     body: JSON.stringify({
                         verb,
@@ -376,15 +391,21 @@ export class HTTPAPIConnector implements ServiceConnector {
                 throw new Error(`Service returned error ${response.status}: ${body || response.statusText}`);
             }
 
+            // Collect response headers
+            const responseHeaders: Record<string, string> = {};
+            response.headers.forEach((value, key) => {
+                responseHeaders[key] = value;
+            });
+
             const contentType = response.headers.get("content-type") ?? "";
             if (contentType.includes("application/json")) {
                 const data = await response.json() as unknown;
-                return jsonToFlowValue(data);
+                return { value: jsonToFlowValue(data), status: response.status, headers: responseHeaders };
             }
 
             // Non-JSON response: return as text
             const textBody = await response.text();
-            return text(textBody);
+            return { value: text(textBody), status: response.status, headers: responseHeaders };
         } catch (err) {
             if (err instanceof Error && err.name === "AbortError") {
                 throw new Error(`Request to ${this.baseUrl} timed out after 30 seconds`);
@@ -403,7 +424,7 @@ export class WebhookConnector implements ServiceConnector {
         this.url = url;
     }
 
-    async call(verb: string, description: string, params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(verb: string, description: string, params: Map<string, FlowValue>, _path?: string, headers?: Record<string, string>): Promise<ServiceResponse> {
         const serialized: Record<string, unknown> = {};
         for (const [k, v] of params) {
             serialized[k] = flowValueToJson(v);
@@ -415,7 +436,7 @@ export class WebhookConnector implements ServiceConnector {
         try {
             const response = await fetch(this.url, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...headers },
                 body: JSON.stringify({ verb, description, ...serialized }),
                 signal: controller.signal,
             });
@@ -425,7 +446,7 @@ export class WebhookConnector implements ServiceConnector {
                 throw new Error(`Webhook returned error ${response.status}: ${body || response.statusText}`);
             }
 
-            return record({ status: text("ok") });
+            return { value: record({ status: text("ok") }), status: response.status };
         } catch (err) {
             if (err instanceof Error && err.name === "AbortError") {
                 throw new Error(`Webhook at ${this.url} timed out after 30 seconds`);
@@ -438,12 +459,14 @@ export class WebhookConnector implements ServiceConnector {
 }
 
 export class PluginStubConnector implements ServiceConnector {
-    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<ServiceResponse> {
         // Plugin connectors are not yet implemented — fall back to mock behavior
-        return record({
-            status: text("ok"),
-            data: text(`mock plugin response for: ${verb} ${description}`),
-        });
+        return {
+            value: record({
+                status: text("ok"),
+                data: text(`mock plugin response for: ${verb} ${description}`),
+            }),
+        };
     }
 }
 
@@ -494,7 +517,7 @@ export class AnthropicConnector implements ServiceConnector {
         return this.model;
     }
 
-    async call(_verb: string, description: string, params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(_verb: string, description: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
         if (!this.apiKey) {
             throw new Error("Missing API key. Set ANTHROPIC_API_KEY in your .env file.");
         }
@@ -514,7 +537,7 @@ export class AnthropicConnector implements ServiceConnector {
         const textBlock = message.content.find((b: { type: string }) => b.type === "text");
         const responseText = textBlock && "text" in textBlock ? (textBlock as { type: "text"; text: string }).text : "";
 
-        return parseAIResponse(responseText);
+        return { value: parseAIResponse(responseText) };
     }
 }
 
@@ -531,7 +554,7 @@ export class OpenAIConnector implements ServiceConnector {
         return this.model;
     }
 
-    async call(_verb: string, description: string, params: Map<string, FlowValue>): Promise<FlowValue> {
+    async call(_verb: string, description: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
         if (!this.apiKey) {
             throw new Error("Missing API key. Set OPENAI_API_KEY in your .env file.");
         }
@@ -552,7 +575,7 @@ export class OpenAIConnector implements ServiceConnector {
 
         const responseText = response.choices[0]?.message?.content ?? "";
 
-        return parseAIResponse(responseText);
+        return { value: parseAIResponse(responseText) };
     }
 }
 
@@ -608,6 +631,7 @@ class RejectSignal {
 interface ExecutionContext {
     env: Environment;
     connectors: Map<string, ServiceConnector>;
+    resolvedHeaders: Map<string, Record<string, string>>;
     log: LogEntry[];
     currentStep: string | null;
     source: string;
@@ -946,13 +970,34 @@ async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Pro
         path = toDisplay(pathValue);
     }
 
+    // Look up resolved headers for this service
+    const serviceHeaders = ctx.resolvedHeaders.get(stmt.service);
+
+    function storeServiceResponse(resp: ServiceResponse): void {
+        if (stmt.resultVar) {
+            ctx.env.set(stmt.resultVar, resp.value);
+        }
+        if (stmt.statusVar) {
+            ctx.env.set(stmt.statusVar, resp.status !== undefined ? num(resp.status) : EMPTY);
+        }
+        if (stmt.headersVar) {
+            if (resp.headers) {
+                const headerEntries: Record<string, FlowValue> = {};
+                for (const [k, v] of Object.entries(resp.headers)) {
+                    headerEntries[k] = text(v);
+                }
+                ctx.env.set(stmt.headersVar, record(headerEntries));
+            } else {
+                ctx.env.set(stmt.headersVar, EMPTY);
+            }
+        }
+    }
+
     if (stmt.errorHandler) {
         await executeWithErrorHandler(
             async () => {
-                const result = await connector.call(stmt.verb, stmt.description, params, path);
-                if (stmt.resultVar) {
-                    ctx.env.set(stmt.resultVar, result);
-                }
+                const resp = await connector.call(stmt.verb, stmt.description, params, path, serviceHeaders);
+                storeServiceResponse(resp);
                 addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
             },
             stmt.errorHandler,
@@ -962,10 +1007,8 @@ async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Pro
         );
     } else {
         try {
-            const result = await connector.call(stmt.verb, stmt.description, params, path);
-            if (stmt.resultVar) {
-                ctx.env.set(stmt.resultVar, result);
-            }
+            const resp = await connector.call(stmt.verb, stmt.description, params, path, serviceHeaders);
+            storeServiceResponse(resp);
             addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -988,7 +1031,8 @@ async function executeAskStatement(stmt: AskStatement, ctx: ExecutionContext): P
     }
 
     try {
-        const response = await connector.call("ask", stmt.instruction, new Map());
+        const resp = await connector.call("ask", stmt.instruction, new Map());
+        const response = resp.value;
         addLogEntry(ctx, "ask " + stmt.agent, "success", { agent: stmt.agent, instruction: stmt.instruction });
 
         // Extract result and confidence from the response
@@ -1069,7 +1113,9 @@ async function executeWithErrorHandler(
             const message = err instanceof Error ? err.message : String(err);
             if (attempt < maxAttempts) {
                 addLogEntry(ctx, `retry ${attempt}/${handler.retryCount}`, "failure", { ...details, error: message });
-                // In a real runtime we'd wait handler.retryWaitSeconds here
+                if (handler.retryWaitSeconds) {
+                    await new Promise(resolve => setTimeout(resolve, handler.retryWaitSeconds! * 1000));
+                }
             }
         }
     }
@@ -1168,10 +1214,37 @@ export async function execute(program: Program, source: string, options?: Runtim
         }
     }
 
+    // Resolve service headers (evaluate expressions using the global environment)
+    const resolvedHeaders = new Map<string, Record<string, string>>();
+    if (program.services) {
+        const headerCtx: ExecutionContext = {
+            env: globalEnv,
+            connectors,
+            resolvedHeaders,
+            log,
+            currentStep: null,
+            source,
+            fileName,
+            verbose: options?.verbose ?? false,
+            strictEnv: options?.strictEnv ?? false,
+        };
+        for (const decl of program.services.declarations) {
+            if (decl.headers.length > 0) {
+                const headers: Record<string, string> = {};
+                for (const header of decl.headers) {
+                    const value = evaluateExpression(header.value, headerCtx);
+                    headers[header.name] = toDisplay(value);
+                }
+                resolvedHeaders.set(decl.name, headers);
+            }
+        }
+    }
+
     // Build execution context
     const ctx: ExecutionContext = {
         env: globalEnv,
         connectors,
+        resolvedHeaders,
         log,
         currentStep: null,
         source,

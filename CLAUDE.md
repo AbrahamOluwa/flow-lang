@@ -4,7 +4,7 @@
 
 - **Update this file at the end of every phase** — refresh the Project Status, Decisions Log, and any new conventions discovered during implementation.
 - **Run `npm run test` after every change** — all tests must pass before moving on.
-- **Detailed plan lives in `IMPLEMENTATION_PLAN_V2.md`** — this file is the quick reference, that file has the full task list.
+- **Detailed plan lives in `IMPLEMENTATION_PLAN_V2.md` and `IMPLEMENTATION_PLAN_V3.md`** — this file is the quick reference, those files have the full task lists.
 
 ## Project Status
 
@@ -21,12 +21,15 @@
 | 9. AI Connector | Complete | 16 | Anthropic + OpenAI via SDKs, dynamic import, JSON response parsing |
 | npm publish | Complete | — | Published as `flow-lang@0.1.0` on npm |
 | 10. Webhook Server | Complete | 18 | `flow serve` command, Express, single/multi-file, supertest |
+| 15. HTTP Headers | Complete | 15 | `with headers:` on service declarations, env interpolation |
+| 16. Response Access | Complete | 10 | `save the status as`, `save the response headers as`, ServiceResponse wrapper |
+| 17. Real Retry Delays | Complete | 6 | `waiting N seconds/minutes` now actually waits via setTimeout |
 | 11. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
 | 12. Logging | Planned | ~12 | Structured JSON logs, timing, `--output-log` |
 | 13. Docs Site | Planned | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 418 (phases 1–10 + input-file) | Target: ~430+ after phase 12**
+**Tests passing: 449 (phases 1–17 + input-file)**
 
 ## Decisions Log
 
@@ -42,7 +45,7 @@ Decisions made during implementation that weren't in the original brief:
 8. **Dot-access roots are lenient** — expressions like `signup.email` or `order.items` are not flagged as undefined variables. They are treated as implicit trigger/service data, since Flow users access external data via dot notation.
 9. **Scope model: loops create child scopes, steps don't** — `for each` loop variables are scoped to the loop body (child scope), while `step` blocks are purely organizational and share the parent scope.
 10. **`env` is predefined** — the `env` identifier is always available in the global scope so `env.API_KEY` works without an explicit `set`.
-11. **Runtime is async** — `execute()` returns `Promise<ExecutionResult>`. All service connectors return `Promise<FlowValue>`. Expression evaluation stays synchronous. Retry waits are still skipped (no actual delays).
+11. **Runtime is async** — `execute()` returns `Promise<ExecutionResult>`. All service connectors return `Promise<ServiceResponse>`. Expression evaluation stays synchronous. Retry waits use real `setTimeout` delays.
 12. **Complete/reject use throw signals** — `CompleteSignal` and `RejectSignal` are thrown to halt execution from any nesting depth, caught in the main `execute()` function.
 13. **Missing dot-access fields return FlowEmpty** — `user.missing_field` returns `FlowEmpty` rather than throwing, consistent with the "no nulls but has empty" design.
 14. **Math on text with `plus` means concatenation** — `"hello" plus " world"` produces `"hello world"`. Other math operators require numbers.
@@ -59,6 +62,10 @@ Decisions made during implementation that weren't in the original brief:
 25. **Server module separate from CLI** — `src/server/index.ts` exports `createApp()` (testable with supertest) and `startServer()` (used by CLI). `.flow` files pre-parsed at startup, only `execute()` runs per request.
 26. **Server routes by filename** — In directory mode, each `.flow` file becomes a POST route: `email-verification.flow` → `POST /email-verification`. Single-file mode uses `POST /`.
 27. **`--input-file` for file-based input** — `flow run` accepts `--input-file <path>` to read input from `.json`, `.csv`, `.xlsx`, or `.xls` files. Single-row spreadsheets become a flat record; multi-row become `{ rows: [...], count: N }`. Uses SheetJS (`xlsx` package). Cannot be combined with `--input`.
+28. **`with headers:` for service HTTP headers** — Service declarations support an optional indented `with headers:` block. Headers are key-value pairs where values support string interpolation (e.g., `"Bearer {env.STRIPE_KEY}"`). Headers are evaluated once at workflow startup, after `env` is available. Custom headers merge with defaults (custom overrides). Only `api` and `webhook` types support headers; `ai`/`plugin` emit a warning.
+29. **`ServiceResponse` wrapper for connector return values** — `ServiceConnector.call()` returns `Promise<ServiceResponse>` instead of `Promise<FlowValue>`. `ServiceResponse` contains `value` (the body), optional `status` (HTTP status code as number), and optional `headers` (response headers as string record). Mock connectors return `{ value: <FlowValue> }`. HTTPAPIConnector returns real status and headers.
+30. **`save the status as` / `save the response headers as`** — Service calls support three save clauses: `save the result as` (body → FlowValue), `save the status as` (HTTP status → FlowNumber, or FlowEmpty if absent), `save the response headers as` (response headers → FlowRecord of strings, or FlowEmpty if absent).
+31. **Real retry delays** — `retry N times waiting M seconds` uses `await new Promise(resolve => setTimeout(resolve, ms))` for actual delays between retries. Supports both seconds and minutes units (parser converts minutes to seconds × 60). Tests use Vitest fake timers (`vi.useFakeTimers()`) for deterministic verification.
 
 ## What This Is
 
@@ -96,21 +103,27 @@ src/
   errors/         # Error formatting and suggestions
 tests/
   lexer/          # 100 tests
-  parser/         # 67 tests
-  analyzer/       # 41 tests
-  runtime/        # 150 tests
+  parser/         # 75 tests
+  analyzer/       # 45 tests
+  runtime/        # 167 tests
   server/         # 18 tests — webhook server (supertest)
   errors/         # 14 tests
-  integration/    # 17 tests — end-to-end .flow file tests
-examples/         # Three .flow files (email-verification, order-processing, loan-application)
+  integration/    # 19 tests — end-to-end .flow file tests
+examples/         # Four .flow files (email-verification, order-processing, loan-application, github-api)
 ```
 
 ## Key Architecture Notes
 
 ### ServiceConnector Interface
 ```typescript
+interface ServiceResponse {
+    value: FlowValue;
+    status?: number;
+    headers?: Record<string, string>;
+}
+
 interface ServiceConnector {
-    call(verb: string, description: string, params: Map<string, FlowValue>, path?: string): Promise<FlowValue>;
+    call(verb: string, description: string, params: Map<string, FlowValue>, path?: string, headers?: Record<string, string>): Promise<ServiceResponse>;
 }
 ```
 All service interactions (API, AI, plugin, webhook) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector`, `AnthropicConnector`, `OpenAIConnector` (for real execution).
@@ -174,6 +187,16 @@ Error in loan-application.flow, line 12:
 
 ### File Structure
 Three optional top-level blocks: `config:`, `services:`, `workflow:`
+
+### Service Declarations
+```
+services:
+    MyAPI is an API at "https://api.example.com"
+        with headers:
+            Authorization: "Bearer {env.API_KEY}"
+            Accept: "application/json"
+```
+Headers are optional. Values support string interpolation for env vars. Only `api` and `webhook` types support headers.
 
 ### 7 Constructs (no more)
 1. **Steps:** `<verb> <description> using <Service> [at <path>] [with <params>]`

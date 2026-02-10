@@ -1,0 +1,31 @@
+# GitHub Repository Info
+# Fetches repository details using authenticated GitHub API.
+# Demonstrates: service headers, env var interpolation, at keyword.
+#
+# Usage:
+#   flow run examples/github-api.flow --input '{"owner": "octocat", "repo": "Hello-World"}' --mock
+
+config:
+    name: "GitHub Repository Info"
+    version: 1
+
+services:
+    GitHub is an API at "https://api.github.com"
+        with headers:
+            Authorization: "token {env.GITHUB_TOKEN}"
+            Accept: "application/vnd.github.v3+json"
+            User-Agent: "flow-lang"
+
+workflow:
+    trigger: when a request is received
+
+    set owner to request.owner
+    set repo to request.repo
+    log "Fetching info for {owner}/{repo}"
+
+    get repository using GitHub at "/repos/{owner}/{repo}"
+        save the result as repository
+
+    log "Repository: {repository.name}"
+
+    complete with name repository.name and owner owner

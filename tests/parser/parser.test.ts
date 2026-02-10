@@ -6,6 +6,7 @@ import type {
     SetStatement, IfStatement, ForEachStatement,
     LogStatement, CompleteStatement, RejectStatement,
     ServiceCall, AskStatement, StepBlock,
+    ServiceDeclaration, ServiceHeader,
     MathExpression, ComparisonExpression, DotAccess,
     InterpolatedString, LogicalExpression,
 } from "../../src/types/index.js";
@@ -811,5 +812,137 @@ describe("Parser — line numbers", () => {
         ].join("\n");
         const program = pOk(source);
         expect(program.services!.declarations[0]!.loc.line).toBe(2);
+    });
+});
+
+// ============================================================
+// Service headers
+// ============================================================
+
+describe("Parser — service headers", () => {
+    it("parses service declaration with headers", () => {
+        const source = [
+            "services:",
+            '    Stripe is an API at "https://api.stripe.com/v1"',
+            "        with headers:",
+            '            Authorization: "Bearer sk_test_123"',
+        ].join("\n");
+
+        const program = pOk(source);
+        const decl = program.services!.declarations[0]!;
+        expect(decl.name).toBe("Stripe");
+        expect(decl.headers).toHaveLength(1);
+        expect(decl.headers[0]!.name).toBe("Authorization");
+        expect(decl.headers[0]!.value.kind).toBe("StringLiteral");
+    });
+
+    it("parses service without headers (backward compatible)", () => {
+        const source = [
+            "services:",
+            '    MyAPI is an API at "https://example.com"',
+        ].join("\n");
+
+        const program = pOk(source);
+        const decl = program.services!.declarations[0]!;
+        expect(decl.headers).toHaveLength(0);
+    });
+
+    it("parses multiple headers", () => {
+        const source = [
+            "services:",
+            '    GitHub is an API at "https://api.github.com"',
+            "        with headers:",
+            '            Authorization: "token ghp_abc123"',
+            '            Accept: "application/vnd.github.v3+json"',
+            '            User-Agent: "flow-lang"',
+        ].join("\n");
+
+        const program = pOk(source);
+        const decl = program.services!.declarations[0]!;
+        expect(decl.headers).toHaveLength(3);
+        expect(decl.headers[0]!.name).toBe("Authorization");
+        expect(decl.headers[1]!.name).toBe("Accept");
+        expect(decl.headers[2]!.name).toBe("User-Agent");
+    });
+
+    it("parses header value with string interpolation", () => {
+        const source = [
+            "services:",
+            '    Stripe is an API at "https://api.stripe.com"',
+            "        with headers:",
+            '            Authorization: "Bearer {env.STRIPE_KEY}"',
+        ].join("\n");
+
+        const program = pOk(source);
+        const decl = program.services!.declarations[0]!;
+        expect(decl.headers).toHaveLength(1);
+        expect(decl.headers[0]!.value.kind).toBe("InterpolatedString");
+    });
+
+    it("parses multiple services where only some have headers", () => {
+        const source = [
+            "services:",
+            '    Stripe is an API at "https://api.stripe.com"',
+            "        with headers:",
+            '            Authorization: "Bearer sk_test"',
+            '    InternalAPI is an API at "https://internal.example.com"',
+        ].join("\n");
+
+        const program = pOk(source);
+        expect(program.services!.declarations).toHaveLength(2);
+        expect(program.services!.declarations[0]!.headers).toHaveLength(1);
+        expect(program.services!.declarations[1]!.headers).toHaveLength(0);
+    });
+});
+
+// ============================================================
+// Response access — save the status as / save the response headers as
+// ============================================================
+
+describe("Parser — response access (save status/headers)", () => {
+    it("parses save the status as in a service call", () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    get data using API",
+            "        save the status as http-status",
+        ].join("\n");
+
+        const stmt = firstStmt(source) as ServiceCall;
+        expect(stmt.kind).toBe("ServiceCall");
+        expect(stmt.statusVar).toBe("http-status");
+    });
+
+    it("parses save the response headers as in a service call", () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    get data using API",
+            "        save the response headers as resp-headers",
+        ].join("\n");
+
+        const stmt = firstStmt(source) as ServiceCall;
+        expect(stmt.kind).toBe("ServiceCall");
+        expect(stmt.headersVar).toBe("resp-headers");
+    });
+
+    it("parses all three save clauses together", () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    get data using API",
+            "        save the result as data",
+            "        save the status as status-code",
+            "        save the response headers as headers",
+        ].join("\n");
+
+        const stmt = firstStmt(source) as ServiceCall;
+        expect(stmt.kind).toBe("ServiceCall");
+        expect(stmt.resultVar).toBe("data");
+        expect(stmt.statusVar).toBe("status-code");
+        expect(stmt.headersVar).toBe("headers");
     });
 });

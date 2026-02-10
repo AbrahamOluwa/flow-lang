@@ -1,7 +1,7 @@
 import {
     Token, TokenType, FlowError,
     Program, ConfigBlock, ConfigEntry,
-    ServicesBlock, ServiceDeclaration, ServiceType,
+    ServicesBlock, ServiceDeclaration, ServiceType, ServiceHeader,
     WorkflowBlock, TriggerDeclaration,
     Statement, StepBlock, ServiceCall, Parameter,
     AskStatement, SetStatement, IfStatement, OtherwiseIf,
@@ -412,7 +412,55 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
         const target = advance().value;
 
         expectNewline();
-        return { kind: "ServiceDeclaration", name, serviceType, target, loc: location };
+
+        // Check for optional "with headers:" indented block
+        const headers: ServiceHeader[] = [];
+        if (check(TokenType.INDENT)) {
+            const savedPos = pos;
+            advance(); // consume INDENT
+
+            if (check(TokenType.KEYWORD, "with") &&
+                peekNext().type === TokenType.IDENTIFIER && peekNext().value === "headers") {
+                advance(); // consume "with"
+                advance(); // consume "headers"
+                expect(TokenType.COLON, undefined, 'after "headers"');
+                expectNewline();
+
+                if (match(TokenType.INDENT)) {
+                    while (!check(TokenType.DEDENT) && !atEnd()) {
+                        skipNewlines();
+                        if (check(TokenType.DEDENT) || atEnd()) break;
+
+                        const headerLoc = loc();
+                        const headerNameTok = current();
+                        if (headerNameTok.type !== TokenType.IDENTIFIER && headerNameTok.type !== TokenType.KEYWORD) {
+                            addError(headerNameTok,
+                                `Expected a header name (like "Authorization"), but found "${headerNameTok.value}".`);
+                            skipToNextStatement();
+                            skipNewlines();
+                            continue;
+                        }
+                        const headerName = advance().value;
+                        expect(TokenType.COLON, undefined, "after header name");
+                        const headerValue = parseAtomExpression();
+                        headers.push({ name: headerName, value: headerValue, loc: headerLoc });
+                        expectNewline();
+                        skipNewlines();
+                    }
+                    match(TokenType.DEDENT);
+                }
+            } else {
+                // Not a "with headers:" block — backtrack
+                pos = savedPos;
+            }
+
+            // Consume the outer DEDENT if we parsed headers
+            if (headers.length > 0) {
+                match(TokenType.DEDENT);
+            }
+        }
+
+        return { kind: "ServiceDeclaration", name, serviceType, target, headers, loc: location };
     }
 
     // --------------------------------------------------------
@@ -811,6 +859,8 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
 
         // Check for indented sub-clauses (save directives or error handler)
         let resultVar: string | null = null;
+        let statusVar: string | null = null;
+        let headersVar: string | null = null;
         let errorHandler: ErrorHandler | null = null;
         if (match(TokenType.INDENT)) {
             while (!check(TokenType.DEDENT) && !atEnd()) {
@@ -820,6 +870,14 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
                 if (check(TokenType.KEYWORD_COMPOUND, "save the result as")) {
                     advance();
                     resultVar = advance().value;
+                    expectNewline();
+                } else if (check(TokenType.KEYWORD_COMPOUND, "save the status as")) {
+                    advance();
+                    statusVar = advance().value;
+                    expectNewline();
+                } else if (check(TokenType.KEYWORD_COMPOUND, "save the response headers as")) {
+                    advance();
+                    headersVar = advance().value;
                     expectNewline();
                 } else if (check(TokenType.KEYWORD_COMPOUND, "on failure") || check(TokenType.KEYWORD_COMPOUND, "on timeout")) {
                     errorHandler = parseErrorHandler();
@@ -834,7 +892,7 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
             match(TokenType.DEDENT);
         }
 
-        return { kind: "ServiceCall", verb, description, service, path, parameters, resultVar, errorHandler, loc: location };
+        return { kind: "ServiceCall", verb, description, service, path, parameters, resultVar, statusVar, headersVar, errorHandler, loc: location };
     }
 
     // --------------------------------------------------------

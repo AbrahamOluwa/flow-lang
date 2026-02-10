@@ -6,7 +6,7 @@ import { dirname } from "path";
 import { tokenize } from "../../src/lexer/index.js";
 import { parse } from "../../src/parser/index.js";
 import { analyze } from "../../src/analyzer/index.js";
-import { execute, text, num } from "../../src/runtime/index.js";
+import { execute, text, num, record, type ServiceConnector } from "../../src/runtime/index.js";
 import type { ExecutionResult, FlowValue } from "../../src/types/index.js";
 
 // ============================================================
@@ -264,5 +264,115 @@ describe("Integration — loan-application.flow", () => {
         });
         const msgs = logMessages(result);
         expect(msgs.some(m => m.includes("confidence"))).toBe(true);
+    });
+});
+
+// ============================================================
+// Service Headers (end-to-end)
+// ============================================================
+
+describe("Integration — service headers", () => {
+    it("end-to-end: headers with env interpolation are passed to connector", async () => {
+        const source = [
+            "config:",
+            '    name: "API with Auth"',
+            "    version: 1",
+            "",
+            "services:",
+            '    GitHub is an API at "https://api.github.com"',
+            "        with headers:",
+            '            Authorization: "token {env.GITHUB_TOKEN}"',
+            '            Accept: "application/vnd.github.v3+json"',
+            "",
+            "workflow:",
+            "    trigger: when a request is received",
+            "    get repos using GitHub",
+            "        save the result as repos",
+            '    complete with status "ok"',
+        ].join("\n");
+
+        // Verify it passes check with zero errors
+        const tokens = tokenize(source);
+        const { program, errors: parseErrors } = parse(tokens, source);
+        const analysisErrors = analyze(program, source);
+        expect([...parseErrors, ...analysisErrors]).toHaveLength(0);
+
+        // Verify headers reach the connector at runtime
+        const receivedHeaders: Record<string, string>[] = [];
+        const spyConnector: ServiceConnector = {
+            async call(_verb, _desc, _params, _path, headers) {
+                receivedHeaders.push(headers ?? {});
+                return { value: record({ repos: text("mock-repo-list") }) };
+            }
+        };
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("GitHub", spyConnector);
+
+        const result = await execute(program, source, {
+            connectors,
+            envVars: { GITHUB_TOKEN: "ghp_realtoken123" },
+        });
+
+        expect(result.result.status).toBe("completed");
+        expect(receivedHeaders).toHaveLength(1);
+        expect(receivedHeaders[0]!["Authorization"]).toBe("token ghp_realtoken123");
+        expect(receivedHeaders[0]!["Accept"]).toBe("application/vnd.github.v3+json");
+    });
+});
+
+// ============================================================
+// Response access — end-to-end
+// ============================================================
+
+describe("Integration — response access", () => {
+    it("service call with save status and headers, status check in condition", () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "",
+            "workflow:",
+            '    create item using API with name "test"',
+            "        save the result as data",
+            "        save the status as status-code",
+            "        save the response headers as resp-headers",
+            "    if status-code is 201:",
+            '        log "created"',
+            "    otherwise:",
+            '        log "other"',
+            '    complete with result data.name and status status-code',
+        ].join("\n");
+
+        // Parse + analyze
+        const tokens = tokenize(source);
+        const { program, errors: parseErrors } = parse(tokens, source);
+        const analysisErrors = analyze(program, source);
+        expect([...parseErrors, ...analysisErrors]).toHaveLength(0);
+
+        // Execute with spy connector
+        const spyConnector: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({ name: text("widget") }),
+                    status: 201,
+                    headers: { "location": "/items/42" },
+                };
+            }
+        };
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+
+        return execute(program, source, { connectors }).then(result => {
+            expect(result.result.status).toBe("completed");
+            if (result.result.status === "completed") {
+                expect(result.result.outputs["result"]).toEqual(text("widget"));
+                expect(result.result.outputs["status"]).toEqual(num(201));
+            }
+            // Check that "created" was logged (status 201 matched the condition)
+            const logs = result.log.filter(e => e.action === "log");
+            expect(logs).toHaveLength(1);
+            expect(logs[0]!.details["message"]).toBe("created");
+        });
     });
 });

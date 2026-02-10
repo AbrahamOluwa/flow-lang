@@ -7,14 +7,18 @@ import { createError } from "../errors/index.js";
 
 // Multi-word keywords, sorted longest-first for greedy matching
 const COMPOUND_KEYWORDS = [
+    "save the response headers as",
+    "save the confidence as",
+    "save the result as",
+    "save the status as",
     "does not exist",
+    "if still failing",
     "is not empty",
     "otherwise if",
     "divided by",
     "rounded to",
     "on failure",
     "on timeout",
-    "if still failing",
     "is at least",
     "is at most",
     "is not",
@@ -22,8 +26,6 @@ const COMPOUND_KEYWORDS = [
     "is below",
     "is empty",
     "for each",
-    "save the result as",
-    "save the confidence as",
 ] as const;
 
 const SINGLE_KEYWORDS = new Set([

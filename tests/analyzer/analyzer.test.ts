@@ -465,3 +465,71 @@ describe("Analyzer — edge cases", () => {
         checkOk(source);
     });
 });
+
+// ============================================================
+// Service headers
+// ============================================================
+
+describe("Analyzer — service headers", () => {
+    it("accepts headers on API service type", () => {
+        const source = [
+            "services:",
+            '    Stripe is an API at "https://api.stripe.com"',
+            "        with headers:",
+            '            Authorization: "Bearer sk_test"',
+            "",
+            "workflow:",
+            '    log "ok"',
+        ].join("\n");
+        checkOk(source);
+    });
+
+    it("accepts headers on webhook service type", () => {
+        const source = [
+            "services:",
+            '    Hook is a webhook at "https://hooks.example.com"',
+            "        with headers:",
+            '            X-Secret: "mysecret"',
+            "",
+            "workflow:",
+            '    log "ok"',
+        ].join("\n");
+        checkOk(source);
+    });
+
+    it("warns about headers on AI service type", () => {
+        const source = [
+            "services:",
+            '    Agent is an AI using "anthropic/claude-sonnet-4-20250514"',
+            "        with headers:",
+            '            Authorization: "Bearer key"',
+            "",
+            "workflow:",
+            '    log "ok"',
+        ].join("\n");
+        checkHasWarning(source, "not supported on ai services");
+    });
+});
+
+// ============================================================
+// Response access — statusVar / headersVar scope
+// ============================================================
+
+describe("Analyzer — response access variables", () => {
+    it("variables from save the status as and save the response headers as are usable", () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "",
+            "workflow:",
+            "    get data using API",
+            "        save the result as data",
+            "        save the status as status-code",
+            "        save the response headers as resp-headers",
+            "    log data",
+            "    log status-code",
+            "    log resp-headers",
+        ].join("\n");
+        checkOk(source);
+    });
+});

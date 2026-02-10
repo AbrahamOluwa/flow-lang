@@ -123,6 +123,25 @@ export function analyze(program: Program, source: string, fileName: string = "<i
                     `Duplicate service name "${decl.name}". Each service must have a unique name.`);
             }
             seen.add(decl.name);
+
+            // Validate headers
+            if (decl.headers.length > 0) {
+                if (decl.serviceType === "ai" || decl.serviceType === "plugin") {
+                    addWarning(decl.headers[0]!.loc,
+                        `Headers are not supported on ${decl.serviceType} services. They will be ignored.`,
+                        `Remove the "with headers:" block from "${decl.name}".`);
+                }
+
+                const seenHeaders = new Set<string>();
+                for (const header of decl.headers) {
+                    const lowerName = header.name.toLowerCase();
+                    if (seenHeaders.has(lowerName)) {
+                        addWarning(header.loc,
+                            `Duplicate header "${header.name}" on service "${decl.name}". The last value will be used.`);
+                    }
+                    seenHeaders.add(lowerName);
+                }
+            }
         }
     }
 
@@ -280,6 +299,18 @@ export function analyze(program: Program, source: string, fileName: string = "<i
         }
         for (const param of stmt.parameters) {
             checkExpression(param.value, scope);
+        }
+        if (stmt.path) {
+            checkExpression(stmt.path, scope);
+        }
+        if (stmt.resultVar) {
+            defineVar(scope, stmt.resultVar);
+        }
+        if (stmt.statusVar) {
+            defineVar(scope, stmt.statusVar);
+        }
+        if (stmt.headersVar) {
+            defineVar(scope, stmt.headersVar);
         }
         if (stmt.errorHandler) {
             analyzeErrorHandler(stmt.errorHandler, scope);

@@ -14,6 +14,7 @@ import {
     inferHTTPMethod,
     HTTPAPIConnector, WebhookConnector, PluginStubConnector,
     AnthropicConnector, OpenAIConnector,
+    type ServiceConnector,
 } from "../../src/runtime/index.js";
 import type { FlowValue, ExecutionResult } from "../../src/types/index.js";
 
@@ -214,37 +215,37 @@ describe("Environment", () => {
 describe("Mock connectors", () => {
     it("MockAPIConnector returns a record", async () => {
         const conn = new MockAPIConnector();
-        const result = await conn.call("fetch", "data", new Map());
-        expect(result.type).toBe("record");
+        const resp = await conn.call("fetch", "data", new Map());
+        expect(resp.value.type).toBe("record");
     });
 
     it("MockAIConnector returns result and confidence", async () => {
         const conn = new MockAIConnector();
-        const result = await conn.call("ask", "analyze data", new Map());
-        expect(result.type).toBe("record");
-        const rec = result as { type: "record"; value: Map<string, FlowValue> };
+        const resp = await conn.call("ask", "analyze data", new Map());
+        expect(resp.value.type).toBe("record");
+        const rec = resp.value as { type: "record"; value: Map<string, FlowValue> };
         expect(rec.value.get("result")?.type).toBe("text");
         expect(rec.value.get("confidence")?.type).toBe("number");
     });
 
     it("MockPluginConnector returns a record", async () => {
         const conn = new MockPluginConnector();
-        const result = await conn.call("run", "task", new Map());
-        expect(result.type).toBe("record");
+        const resp = await conn.call("run", "task", new Map());
+        expect(resp.value.type).toBe("record");
     });
 
     it("MockWebhookConnector returns a record", async () => {
         const conn = new MockWebhookConnector();
-        const result = await conn.call("notify", "webhook", new Map());
-        expect(result.type).toBe("record");
+        const resp = await conn.call("notify", "webhook", new Map());
+        expect(resp.value.type).toBe("record");
     });
 
     it("connector fails when failCount is set", async () => {
         const conn = new MockAPIConnector({ failCount: 1 });
         await expect(conn.call("fetch", "data", new Map())).rejects.toThrow("mock failure");
         // Second call succeeds
-        const result = await conn.call("fetch", "data", new Map());
-        expect(result.type).toBe("record");
+        const resp = await conn.call("fetch", "data", new Map());
+        expect(resp.value.type).toBe("record");
     });
 
     it("createMockConnector dispatches by type", () => {
@@ -1064,10 +1065,10 @@ describe("inferHTTPMethod", () => {
 describe("PluginStubConnector", () => {
     it("returns a mock response", async () => {
         const conn = new PluginStubConnector();
-        const result = await conn.call("run", "task", new Map());
-        expect(result.type).toBe("record");
-        if (result.type === "record") {
-            expect(result.value.get("status")).toEqual(text("ok"));
+        const resp = await conn.call("run", "task", new Map());
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("status")).toEqual(text("ok"));
         }
     });
 });
@@ -1135,12 +1136,12 @@ describe("AnthropicConnector", () => {
         // Re-import to pick up the mock
         const { AnthropicConnector: MockedConnector } = await import("../../src/runtime/index.js");
         const conn = new MockedConnector("anthropic/claude-sonnet-4-20250514", "test-key");
-        const result = await conn.call("ask", "analyze this", new Map());
+        const resp = await conn.call("ask", "analyze this", new Map());
 
-        expect(result.type).toBe("record");
-        if (result.type === "record") {
-            expect(result.value.get("result")).toEqual(text("Looks good"));
-            expect(result.value.get("confidence")).toEqual(num(0.95));
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("result")).toEqual(text("Looks good"));
+            expect(resp.value.value.get("confidence")).toEqual(num(0.95));
         }
 
         vi.doUnmock("@anthropic-ai/sdk");
@@ -1159,12 +1160,12 @@ describe("AnthropicConnector", () => {
 
         const { AnthropicConnector: MockedConnector } = await import("../../src/runtime/index.js");
         const conn = new MockedConnector("anthropic/claude-sonnet-4-20250514", "test-key");
-        const result = await conn.call("ask", "test", new Map());
+        const resp = await conn.call("ask", "test", new Map());
 
-        expect(result.type).toBe("record");
-        if (result.type === "record") {
-            expect(result.value.get("result")).toEqual(text("Just a plain text response"));
-            expect(result.value.get("confidence")).toEqual(num(0.5));
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("result")).toEqual(text("Just a plain text response"));
+            expect(resp.value.value.get("confidence")).toEqual(num(0.5));
         }
 
         vi.doUnmock("@anthropic-ai/sdk");
@@ -1247,12 +1248,12 @@ describe("OpenAIConnector", () => {
 
         const { OpenAIConnector: MockedConnector } = await import("../../src/runtime/index.js");
         const conn = new MockedConnector("openai/gpt-4o", "test-key");
-        const result = await conn.call("ask", "check this", new Map());
+        const resp = await conn.call("ask", "check this", new Map());
 
-        expect(result.type).toBe("record");
-        if (result.type === "record") {
-            expect(result.value.get("result")).toEqual(text("All clear"));
-            expect(result.value.get("confidence")).toEqual(num(0.88));
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("result")).toEqual(text("All clear"));
+            expect(resp.value.value.get("confidence")).toEqual(num(0.88));
         }
 
         vi.doUnmock("openai");
@@ -1271,12 +1272,12 @@ describe("OpenAIConnector", () => {
 
         const { OpenAIConnector: MockedConnector } = await import("../../src/runtime/index.js");
         const conn = new MockedConnector("openai/gpt-4o", "test-key");
-        const result = await conn.call("ask", "test", new Map());
+        const resp = await conn.call("ask", "test", new Map());
 
-        expect(result.type).toBe("record");
-        if (result.type === "record") {
-            expect(result.value.get("result")).toEqual(text("Plain text from GPT"));
-            expect(result.value.get("confidence")).toEqual(num(0.5));
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("result")).toEqual(text("Plain text from GPT"));
+            expect(resp.value.value.get("confidence")).toEqual(num(0.5));
         }
 
         vi.doUnmock("openai");
@@ -1331,5 +1332,450 @@ describe("AI provider routing", () => {
         const result = await runOk(source);
         expect(result.result.status).toBe("completed");
         expect(logMessages(result)).toEqual(["done"]);
+    });
+});
+
+// ============================================================
+// Service headers
+// ============================================================
+
+describe("Service headers", () => {
+    it("passes resolved headers to connector", async () => {
+        const receivedHeaders: Record<string, string>[] = [];
+        const spyConnector: ServiceConnector = {
+            async call(_verb, _desc, _params, _path, headers) {
+                receivedHeaders.push(headers ?? {});
+                return { value: record({ status: text("ok") }) };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    Stripe is an API at "https://api.stripe.com"',
+            "        with headers:",
+            '            Authorization: "Bearer sk_test_123"',
+            "",
+            "workflow:",
+            "    get charges using Stripe",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("Stripe", spyConnector);
+        await runOk(source, { connectors });
+
+        expect(receivedHeaders).toHaveLength(1);
+        expect(receivedHeaders[0]!["Authorization"]).toBe("Bearer sk_test_123");
+    });
+
+    it("resolves env vars in header values via interpolation", async () => {
+        const receivedHeaders: Record<string, string>[] = [];
+        const spyConnector: ServiceConnector = {
+            async call(_verb, _desc, _params, _path, headers) {
+                receivedHeaders.push(headers ?? {});
+                return { value: record({ status: text("ok") }) };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    GitHub is an API at "https://api.github.com"',
+            "        with headers:",
+            '            Authorization: "token {env.GITHUB_TOKEN}"',
+            "",
+            "workflow:",
+            "    get repos using GitHub",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("GitHub", spyConnector);
+        await runOk(source, { connectors, envVars: { GITHUB_TOKEN: "ghp_abc123" } });
+
+        expect(receivedHeaders).toHaveLength(1);
+        expect(receivedHeaders[0]!["Authorization"]).toBe("token ghp_abc123");
+    });
+
+    it("passes multiple headers to connector", async () => {
+        const receivedHeaders: Record<string, string>[] = [];
+        const spyConnector: ServiceConnector = {
+            async call(_verb, _desc, _params, _path, headers) {
+                receivedHeaders.push(headers ?? {});
+                return { value: record({ status: text("ok") }) };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "        with headers:",
+            '            Authorization: "Bearer key123"',
+            '            Accept: "application/xml"',
+            '            X-Custom: "hello"',
+            "",
+            "workflow:",
+            "    get data using API",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+        await runOk(source, { connectors });
+
+        expect(receivedHeaders).toHaveLength(1);
+        expect(receivedHeaders[0]!["Authorization"]).toBe("Bearer key123");
+        expect(receivedHeaders[0]!["Accept"]).toBe("application/xml");
+        expect(receivedHeaders[0]!["X-Custom"]).toBe("hello");
+    });
+
+    it("service without headers passes undefined", async () => {
+        const receivedHeaders: (Record<string, string> | undefined)[] = [];
+        const spyConnector: ServiceConnector = {
+            async call(_verb, _desc, _params, _path, headers) {
+                receivedHeaders.push(headers);
+                return { value: record({ status: text("ok") }) };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "",
+            "workflow:",
+            "    get data using API",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+        await runOk(source, { connectors });
+
+        expect(receivedHeaders).toHaveLength(1);
+        expect(receivedHeaders[0]).toBeUndefined();
+    });
+
+    it("headers work alongside path and params", async () => {
+        const receivedArgs: { path?: string; headers?: Record<string, string>; params: Map<string, FlowValue> }[] = [];
+        const spyConnector: ServiceConnector = {
+            async call(_verb, _desc, params, path, headers) {
+                receivedArgs.push({ path, headers, params });
+                return { value: record({ status: text("ok") }) };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "        with headers:",
+            '            Authorization: "Bearer token"',
+            "",
+            "workflow:",
+            '    get user using API at "/users/1" with status "active"',
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+        await runOk(source, { connectors });
+
+        expect(receivedArgs).toHaveLength(1);
+        expect(receivedArgs[0]!.path).toBe("/users/1");
+        expect(receivedArgs[0]!.headers!["Authorization"]).toBe("Bearer token");
+        expect(receivedArgs[0]!.params.get("status")).toEqual(text("active"));
+    });
+
+    it("HTTPAPIConnector returns status and headers in ServiceResponse", async () => {
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn(async () => {
+            return new Response(JSON.stringify({ ok: true }), {
+                status: 201,
+                headers: { "content-type": "application/json", "x-request-id": "abc123" },
+            });
+        }) as unknown as typeof fetch;
+
+        try {
+            const connector = new HTTPAPIConnector("https://api.example.com");
+            const resp = await connector.call("create", "item", new Map());
+
+            expect(resp.value.type).toBe("record");
+            expect(resp.status).toBe(201);
+            expect(resp.headers).toBeDefined();
+            expect(resp.headers!["content-type"]).toBe("application/json");
+            expect(resp.headers!["x-request-id"]).toBe("abc123");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it("HTTPAPIConnector merges custom headers with defaults", async () => {
+        const calls: { url: string; init: RequestInit }[] = [];
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+            calls.push({ url: String(url), init: init ?? {} });
+            return new Response(JSON.stringify({ ok: true }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+            });
+        }) as unknown as typeof fetch;
+
+        try {
+            const connector = new HTTPAPIConnector("https://api.example.com");
+            await connector.call("get", "data", new Map(), undefined, { Authorization: "Bearer token123" });
+
+            expect(calls).toHaveLength(1);
+            const headers = calls[0]!.init.headers as Record<string, string>;
+            expect(headers["Authorization"]).toBe("Bearer token123");
+            expect(headers["Accept"]).toBe("application/json");
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+});
+
+// ============================================================
+// Response access — save the status as / save the response headers as
+// ============================================================
+
+describe("Runtime — response access", () => {
+    it("save the status as stores HTTP status as number", async () => {
+        const spyConnector: ServiceConnector = {
+            async call() {
+                return { value: record({ ok: bool(true) }), status: 200 };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    get data using API",
+            "        save the status as status-code",
+            "    log status-code",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+        const result = await runOk(source, { connectors });
+        expect(logMessages(result)).toEqual(["200"]);
+    });
+
+    it("save the response headers as stores headers as record", async () => {
+        const spyConnector: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({ ok: bool(true) }),
+                    status: 200,
+                    headers: { "content-type": "application/json", "x-request-id": "abc" },
+                };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    get data using API",
+            "        save the response headers as resp-headers",
+            "    log resp-headers.content-type",
+            "    log resp-headers.x-request-id",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+        const result = await runOk(source, { connectors });
+        expect(logMessages(result)).toEqual(["application/json", "abc"]);
+    });
+
+    it("mock connector returns undefined status — stores FlowEmpty", async () => {
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    get data using API",
+            "        save the status as status-code",
+            '    if status-code is empty:',
+            '        log "no status"',
+        ].join("\n");
+
+        const result = await runOk(source);
+        expect(logMessages(result)).toEqual(["no status"]);
+    });
+
+    it("all three save clauses work together in one service call", async () => {
+        const spyConnector: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({ name: text("test") }),
+                    status: 201,
+                    headers: { "location": "/items/42" },
+                };
+            }
+        };
+
+        const source = [
+            "services:",
+            '    API is an API at "https://example.com"',
+            "workflow:",
+            "    create item using API",
+            "        save the result as data",
+            "        save the status as status-code",
+            "        save the response headers as resp-headers",
+            "    log data.name",
+            "    log status-code",
+            "    log resp-headers.location",
+        ].join("\n");
+
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("API", spyConnector);
+        const result = await runOk(source, { connectors });
+        expect(logMessages(result)).toEqual(["test", "201", "/items/42"]);
+    });
+});
+
+// ============================================================
+// Real retry delays
+// ============================================================
+
+describe("Runtime — real retry delays", () => {
+    it("retry waits the specified duration", async () => {
+        vi.useFakeTimers();
+        try {
+            const connectors = new Map();
+            connectors.set("S", new MockAPIConnector({ failCount: 1 }));
+            const source = [
+                "services:",
+                '    S is a plugin "x"',
+                "workflow:",
+                "    send email using S",
+                "        on failure:",
+                "            retry 2 times waiting 2 seconds",
+            ].join("\n");
+
+            const promise = run(source, { connectors });
+            await vi.advanceTimersByTimeAsync(2000);
+            const result = await promise;
+            expect(result.result.status).toBe("completed");
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("multiple retries wait between each attempt", async () => {
+        vi.useFakeTimers();
+        try {
+            const connectors = new Map();
+            connectors.set("S", new MockAPIConnector({ failCount: 2 }));
+            const source = [
+                "services:",
+                '    S is a plugin "x"',
+                "workflow:",
+                "    send email using S",
+                "        on failure:",
+                "            retry 3 times waiting 3 seconds",
+            ].join("\n");
+
+            const promise = run(source, { connectors });
+            // Advance past first wait
+            await vi.advanceTimersByTimeAsync(3000);
+            // Advance past second wait
+            await vi.advanceTimersByTimeAsync(3000);
+            const result = await promise;
+            expect(result.result.status).toBe("completed");
+            const retryLogs = result.log.filter(e => e.action.startsWith("retry"));
+            expect(retryLogs).toHaveLength(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("no wait when retryWaitSeconds is null", async () => {
+        vi.useFakeTimers();
+        try {
+            const connectors = new Map();
+            connectors.set("S", new MockAPIConnector({ failCount: 1 }));
+            const source = [
+                "services:",
+                '    S is a plugin "x"',
+                "workflow:",
+                "    send email using S",
+                "        on failure:",
+                "            retry 2 times",
+            ].join("\n");
+
+            // Should complete without advancing timers since no wait specified
+            const result = await run(source, { connectors });
+            expect(result.result.status).toBe("completed");
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("wait duration works with minutes unit", async () => {
+        vi.useFakeTimers();
+        try {
+            const connectors = new Map();
+            connectors.set("S", new MockAPIConnector({ failCount: 1 }));
+            const source = [
+                "services:",
+                '    S is a plugin "x"',
+                "workflow:",
+                "    send email using S",
+                "        on failure:",
+                "            retry 2 times waiting 1 minutes",
+            ].join("\n");
+
+            const promise = run(source, { connectors });
+            // 1 minute = 60000ms
+            await vi.advanceTimersByTimeAsync(60000);
+            const result = await promise;
+            expect(result.result.status).toBe("completed");
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("fallback executes after all retried waits", async () => {
+        vi.useFakeTimers();
+        try {
+            const connectors = new Map();
+            connectors.set("S", new MockAPIConnector({ failCount: 100 }));
+            const source = [
+                "services:",
+                '    S is a plugin "x"',
+                "workflow:",
+                "    send email using S",
+                "        on failure:",
+                "            retry 2 times waiting 1 seconds",
+                "            if still failing:",
+                '                log "gave up"',
+            ].join("\n");
+
+            const promise = run(source, { connectors });
+            // Advance past both retry waits
+            await vi.advanceTimersByTimeAsync(1000);
+            await vi.advanceTimersByTimeAsync(1000);
+            const result = await promise;
+            expect(result.result.status).toBe("completed");
+            expect(logMessages(result)).toEqual(["gave up"]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("successful call does not wait", async () => {
+        vi.useFakeTimers();
+        try {
+            const connectors = new Map();
+            connectors.set("S", new MockAPIConnector());
+            const source = [
+                "services:",
+                '    S is a plugin "x"',
+                "workflow:",
+                "    send email using S",
+                "        on failure:",
+                "            retry 3 times waiting 10 seconds",
+            ].join("\n");
+
+            // Should complete immediately without advancing timers
+            const result = await run(source, { connectors });
+            expect(result.result.status).toBe("completed");
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

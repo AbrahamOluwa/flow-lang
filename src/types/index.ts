@@ -84,11 +84,18 @@ export interface ServicesBlock {
 
 export type ServiceType = "api" | "ai" | "plugin" | "webhook";
 
+export interface ServiceHeader {
+    name: string;
+    value: Expression;
+    loc: SourceLocation;
+}
+
 export interface ServiceDeclaration {
     kind: "ServiceDeclaration";
     name: string;
     serviceType: ServiceType;
     target: string;
+    headers: ServiceHeader[];
     loc: SourceLocation;
 }
 
@@ -135,6 +142,8 @@ export interface ServiceCall {
     path: Expression | null;
     parameters: Parameter[];
     resultVar: string | null;
+    statusVar: string | null;
+    headersVar: string | null;
     errorHandler: ErrorHandler | null;
     loc: SourceLocation;
 }
