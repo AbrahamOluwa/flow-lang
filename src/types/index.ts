@@ -390,10 +390,32 @@ export interface LogEntry {
     step: string | null;
     action: string;
     result: "success" | "failure" | "skipped";
+    durationMs: number | null;
     details: Record<string, unknown>;
 }
 
 export interface ExecutionResult {
     result: WorkflowResult;
     log: LogEntry[];
+}
+
+export interface SerializedLogEntry {
+    timestamp: string;
+    step: string | null;
+    action: string;
+    result: "success" | "failure" | "skipped";
+    durationMs: number | null;
+    details: Record<string, unknown>;
+}
+
+export interface StructuredLog {
+    workflow: string;
+    version: number | null;
+    status: "completed" | "rejected" | "error";
+    startedAt: string;
+    completedAt: string;
+    durationMs: number;
+    outputs: Record<string, unknown> | null;
+    error: string | null;
+    entries: SerializedLogEntry[];
 }

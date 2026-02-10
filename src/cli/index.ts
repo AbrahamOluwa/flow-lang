@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { config as loadDotenv } from "dotenv";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -13,7 +13,7 @@ import {
 import { startServer } from "../server/index.js";
 import { formatErrors } from "../errors/index.js";
 import { parseInputFile } from "./input-file.js";
-import type { FlowError, LogEntry } from "../types/index.js";
+import type { FlowError, LogEntry, StructuredLog, SerializedLogEntry } from "../types/index.js";
 import type { ServiceConnector } from "../runtime/index.js";
 
 // ============================================================
@@ -104,6 +104,21 @@ function printLog(log: LogEntry[], verbose: boolean): void {
 }
 
 // ============================================================
+// Structured log writer
+// ============================================================
+
+function serializeLogEntries(entries: LogEntry[]): SerializedLogEntry[] {
+    return entries.map(e => ({
+        timestamp: e.timestamp.toISOString(),
+        step: e.step,
+        action: e.action,
+        result: e.result,
+        durationMs: e.durationMs,
+        details: e.details,
+    }));
+}
+
+// ============================================================
 // Commands
 // ============================================================
 
@@ -124,7 +139,7 @@ function checkCommand(filePath: string): void {
     console.log(chalk.green(`No errors found in ${filePath}`));
 }
 
-async function runCommand(filePath: string, options: { input?: string; inputFile?: string; verbose?: boolean; strictEnv?: boolean; mock?: boolean }): Promise<void> {
+async function runCommand(filePath: string, options: { input?: string; inputFile?: string; verbose?: boolean; strictEnv?: boolean; mock?: boolean; outputLog?: string }): Promise<void> {
     // Load .env file into process.env
     loadDotenv({ quiet: true });
 
@@ -169,7 +184,9 @@ async function runCommand(filePath: string, options: { input?: string; inputFile
         connectors = buildConnectors(pipeline.program!.services.declarations);
     }
 
-    // Execute
+    // Execute with timing
+    const startedAt = new Date();
+    const startTime = performance.now();
     const result = await execute(pipeline.program!, pipeline.source!, {
         input,
         connectors,
@@ -177,6 +194,8 @@ async function runCommand(filePath: string, options: { input?: string; inputFile
         verbose: options.verbose,
         strictEnv: options.strictEnv,
     });
+    const totalMs = Math.round(performance.now() - startTime);
+    const completedAt = new Date();
 
     // Print log
     printLog(result.log, options.verbose ?? false);
@@ -204,9 +223,51 @@ async function runCommand(filePath: string, options: { input?: string; inputFile
             process.exitCode = 1;
             break;
     }
+
+    // Write structured log file if requested
+    if (options.outputLog) {
+        const configEntries = pipeline.program!.config?.entries;
+        const nameEntry = configEntries?.find(e => e.key === "name")?.value;
+        const workflowName = nameEntry ? String(nameEntry) : filePath;
+        const versionEntry = configEntries?.find(e => e.key === "version")?.value;
+        const version = versionEntry ? parseInt(String(versionEntry), 10) : null;
+
+        let outputs: Record<string, unknown> | null = null;
+        let error: string | null = null;
+        if (result.result.status === "completed") {
+            outputs = {};
+            for (const [k, v] of Object.entries(result.result.outputs)) {
+                outputs[k] = flowValueToJson(v);
+            }
+        } else if (result.result.status === "rejected") {
+            error = result.result.message;
+        } else {
+            error = result.result.error.message;
+        }
+
+        const structuredLog: StructuredLog = {
+            workflow: workflowName,
+            version: Number.isNaN(version) ? null : version,
+            status: result.result.status,
+            startedAt: startedAt.toISOString(),
+            completedAt: completedAt.toISOString(),
+            durationMs: totalMs,
+            outputs,
+            error,
+            entries: serializeLogEntries(result.log),
+        };
+
+        try {
+            writeFileSync(options.outputLog, JSON.stringify(structuredLog, null, 2), "utf-8");
+            console.log(chalk.gray(`\nLog written to ${options.outputLog}`));
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(chalk.yellow(`Warning: Could not write log file: ${message}`));
+        }
+    }
 }
 
-async function testCommand(filePath: string, options: { verbose?: boolean }): Promise<void> {
+async function testCommand(filePath: string, options: { verbose?: boolean; outputLog?: string }): Promise<void> {
     const pipeline = runPipeline(filePath);
 
     if (!pipeline.success) {
@@ -217,11 +278,15 @@ async function testCommand(filePath: string, options: { verbose?: boolean }): Pr
 
     console.log(chalk.blue(`Testing ${filePath} with mock services...\n`));
 
+    const startedAt = new Date();
+    const startTime = performance.now();
     const result = await execute(pipeline.program!, pipeline.source!, {
         input: {},
         envVars: { API_KEY: "mock-api-key", SECRET: "mock-secret" },
         verbose: options.verbose,
     });
+    const totalMs = Math.round(performance.now() - startTime);
+    const completedAt = new Date();
 
     printLog(result.log, options.verbose ?? false);
 
@@ -245,6 +310,48 @@ async function testCommand(filePath: string, options: { verbose?: boolean }): Pr
             console.error(formatErrors([result.result.error]));
             process.exitCode = 1;
             break;
+    }
+
+    // Write structured log file if requested
+    if (options.outputLog) {
+        const configEntries = pipeline.program!.config?.entries;
+        const nameEntry = configEntries?.find(e => e.key === "name")?.value;
+        const workflowName = nameEntry ? String(nameEntry) : filePath;
+        const versionEntry = configEntries?.find(e => e.key === "version")?.value;
+        const version = versionEntry ? parseInt(String(versionEntry), 10) : null;
+
+        let outputs: Record<string, unknown> | null = null;
+        let error: string | null = null;
+        if (result.result.status === "completed") {
+            outputs = {};
+            for (const [k, v] of Object.entries(result.result.outputs)) {
+                outputs[k] = flowValueToJson(v);
+            }
+        } else if (result.result.status === "rejected") {
+            error = result.result.message;
+        } else {
+            error = result.result.error.message;
+        }
+
+        const structuredLog: StructuredLog = {
+            workflow: workflowName,
+            version: Number.isNaN(version) ? null : version,
+            status: result.result.status,
+            startedAt: startedAt.toISOString(),
+            completedAt: completedAt.toISOString(),
+            durationMs: totalMs,
+            outputs,
+            error,
+            entries: serializeLogEntries(result.log),
+        };
+
+        try {
+            writeFileSync(options.outputLog, JSON.stringify(structuredLog, null, 2), "utf-8");
+            console.log(chalk.gray(`\nLog written to ${options.outputLog}`));
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error(chalk.yellow(`Warning: Could not write log file: ${message}`));
+        }
     }
 }
 
@@ -272,6 +379,7 @@ program
     .option("--verbose", "Show detailed execution log")
     .option("--strict-env", "Error on missing environment variables instead of using empty")
     .option("--mock", "Use mock services instead of real HTTP calls")
+    .option("--output-log <path>", "Write structured JSON log to a file")
     .action(runCommand);
 
 program
@@ -279,6 +387,7 @@ program
     .description("Test a .flow file with mock services")
     .option("--dry-run", "Use mock services (default)")
     .option("--verbose", "Show detailed execution log")
+    .option("--output-log <path>", "Write structured JSON log to a file")
     .action(testCommand);
 
 program

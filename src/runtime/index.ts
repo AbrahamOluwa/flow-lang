@@ -724,13 +724,7 @@ function evaluateDotAccess(expr: Expression, ctx: ExecutionContext): FlowValue {
                     );
                 }
                 if (isEnvAccess && ctx.verbose) {
-                    ctx.log.push({
-                        timestamp: new Date(),
-                        step: ctx.currentStep,
-                        action: "env warning",
-                        result: "skipped",
-                        details: { message: `Environment variable "${part}" is not set` },
-                    });
+                    addLogEntry(ctx, "env warning", "skipped", { message: `Environment variable "${part}" is not set` });
                 }
                 return EMPTY;
             }
@@ -996,9 +990,11 @@ async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Pro
     if (stmt.errorHandler) {
         await executeWithErrorHandler(
             async () => {
+                const callStart = performance.now();
                 const resp = await connector.call(stmt.verb, stmt.description, params, path, serviceHeaders);
+                const elapsed = Math.round(performance.now() - callStart);
                 storeServiceResponse(resp);
-                addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
+                addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service }, elapsed);
             },
             stmt.errorHandler,
             ctx,
@@ -1006,13 +1002,16 @@ async function executeServiceCall(stmt: ServiceCall, ctx: ExecutionContext): Pro
             { service: stmt.service, verb: stmt.verb, description: stmt.description }
         );
     } else {
+        const callStart = performance.now();
         try {
             const resp = await connector.call(stmt.verb, stmt.description, params, path, serviceHeaders);
+            const elapsed = Math.round(performance.now() - callStart);
             storeServiceResponse(resp);
-            addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service });
+            addLogEntry(ctx, stmt.verb + " " + stmt.description, "success", { service: stmt.service }, elapsed);
         } catch (err) {
+            const elapsed = Math.round(performance.now() - callStart);
             const message = err instanceof Error ? err.message : String(err);
-            addLogEntry(ctx, stmt.verb + " " + stmt.description, "failure", { service: stmt.service, error: message });
+            addLogEntry(ctx, stmt.verb + " " + stmt.description, "failure", { service: stmt.service, error: message }, elapsed);
             throw new RuntimeError(
                 `The service "${stmt.service}" failed: ${message}`,
                 stmt.loc, ctx.source, ctx.fileName
@@ -1030,10 +1029,12 @@ async function executeAskStatement(stmt: AskStatement, ctx: ExecutionContext): P
         );
     }
 
+    const callStart = performance.now();
     try {
         const resp = await connector.call("ask", stmt.instruction, new Map());
+        const elapsed = Math.round(performance.now() - callStart);
         const response = resp.value;
-        addLogEntry(ctx, "ask " + stmt.agent, "success", { agent: stmt.agent, instruction: stmt.instruction });
+        addLogEntry(ctx, "ask " + stmt.agent, "success", { agent: stmt.agent, instruction: stmt.instruction }, elapsed);
 
         // Extract result and confidence from the response
         if (stmt.resultVar) {
@@ -1053,8 +1054,9 @@ async function executeAskStatement(stmt: AskStatement, ctx: ExecutionContext): P
             }
         }
     } catch (err) {
+        const elapsed = Math.round(performance.now() - callStart);
         const message = err instanceof Error ? err.message : String(err);
-        addLogEntry(ctx, "ask " + stmt.agent, "failure", { agent: stmt.agent, error: message });
+        addLogEntry(ctx, "ask " + stmt.agent, "failure", { agent: stmt.agent, error: message }, elapsed);
         throw new RuntimeError(
             `The agent "${stmt.agent}" failed: ${message}`,
             stmt.loc, ctx.source, ctx.fileName
@@ -1085,8 +1087,10 @@ async function executeStepBlock(stmt: StepBlock, ctx: ExecutionContext): Promise
     const prevStep = ctx.currentStep;
     ctx.currentStep = stmt.name;
     addLogEntry(ctx, `step "${stmt.name}" started`, "success", {});
+    const stepStart = performance.now();
     await executeStatements(stmt.body, ctx);
-    addLogEntry(ctx, `step "${stmt.name}" completed`, "success", {});
+    const stepElapsed = Math.round(performance.now() - stepStart);
+    addLogEntry(ctx, `step "${stmt.name}" completed`, "success", {}, stepElapsed);
     ctx.currentStep = prevStep;
 }
 
@@ -1138,12 +1142,13 @@ async function executeWithErrorHandler(
 // Log helper
 // ============================================================
 
-function addLogEntry(ctx: ExecutionContext, action: string, result: LogEntry["result"], details: Record<string, unknown>): void {
+function addLogEntry(ctx: ExecutionContext, action: string, result: LogEntry["result"], details: Record<string, unknown>, durationMs: number | null = null): void {
     ctx.log.push({
         timestamp: new Date(),
         step: ctx.currentStep,
         action,
         result,
+        durationMs,
         details,
     });
 }

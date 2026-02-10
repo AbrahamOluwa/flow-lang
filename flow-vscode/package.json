@@ -1,0 +1,49 @@
+{
+    "name": "flow-lang",
+    "displayName": "Flow Language",
+    "description": "Syntax highlighting, snippets, and language support for the Flow workflow language",
+    "version": "0.1.0",
+    "publisher": "flow-lang",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/AbrahamOluwa/flow-lang"
+    },
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "Snippets"
+    ],
+    "keywords": [
+        "flow",
+        "workflow",
+        "orchestration",
+        "dsl",
+        "automation"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "flow",
+                "aliases": ["Flow", "flow"],
+                "extensions": [".flow"],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "flow",
+                "scopeName": "source.flow",
+                "path": "./syntaxes/flow.tmLanguage.json"
+            }
+        ],
+        "snippets": [
+            {
+                "language": "flow",
+                "path": "./snippets/flow.json"
+            }
+        ]
+    }
+}

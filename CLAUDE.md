@@ -24,12 +24,12 @@
 | 15. HTTP Headers | Complete | 15 | `with headers:` on service declarations, env interpolation |
 | 16. Response Access | Complete | 10 | `save the status as`, `save the response headers as`, ServiceResponse wrapper |
 | 17. Real Retry Delays | Complete | 6 | `waiting N seconds/minutes` now actually waits via setTimeout |
-| 11. VS Code Extension | Planned | — | TextMate grammar, snippets, marketplace |
-| 12. Logging | Planned | ~12 | Structured JSON logs, timing, `--output-log` |
-| 13. Docs Site | Planned | — | VitePress + GitHub Pages |
+| 11. VS Code Extension | Complete | — | TextMate grammar, 8 snippets, language config, packaged .vsix |
+| 12. Structured Logging | Complete | 12 | `durationMs` on log entries, `--output-log` JSON file output |
+| 13. Docs Site | Complete | — | VitePress + GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
-**Tests passing: 449 (phases 1–17 + input-file)**
+**Tests passing: 468 (phases 1–17 + input-file + logging)**
 
 ## Decisions Log
 
@@ -66,6 +66,9 @@ Decisions made during implementation that weren't in the original brief:
 29. **`ServiceResponse` wrapper for connector return values** — `ServiceConnector.call()` returns `Promise<ServiceResponse>` instead of `Promise<FlowValue>`. `ServiceResponse` contains `value` (the body), optional `status` (HTTP status code as number), and optional `headers` (response headers as string record). Mock connectors return `{ value: <FlowValue> }`. HTTPAPIConnector returns real status and headers.
 30. **`save the status as` / `save the response headers as`** — Service calls support three save clauses: `save the result as` (body → FlowValue), `save the status as` (HTTP status → FlowNumber, or FlowEmpty if absent), `save the response headers as` (response headers → FlowRecord of strings, or FlowEmpty if absent).
 31. **Real retry delays** — `retry N times waiting M seconds` uses `await new Promise(resolve => setTimeout(resolve, ms))` for actual delays between retries. Supports both seconds and minutes units (parser converts minutes to seconds × 60). Tests use Vitest fake timers (`vi.useFakeTimers()`) for deterministic verification.
+32. **`durationMs` on log entries** — `LogEntry` has a `durationMs: number | null` field. Service calls, ask statements, and step "completed" entries track wall-clock time via `performance.now()`. Log statements and step "started" entries have `null` duration.
+33. **`--output-log <path>` CLI flag** — `flow run` and `flow test` accept `--output-log` to write a structured JSON log file. The `StructuredLog` envelope contains workflow metadata, total duration, outputs/error, and serialized log entries with ISO timestamps.
+34. **VS Code extension in `flow-vscode/`** — Self-contained extension directory with TextMate grammar, 8 snippets, and language config. Packages to `.vsix` via `@vscode/vsce`. No dependency on the main project build.
 
 ## What This Is
 
@@ -84,8 +87,8 @@ npm run build        # Compile TypeScript
 npm run test         # Run test suite (Vitest)
 npm run lint         # Lint the codebase
 flow check <file>    # Parse and analyze a .flow file
-flow run <file>      # Execute a .flow file (--input <json>, --input-file <path>, --verbose, --strict-env, --mock)
-flow test <file>     # Dry-run with mock services (--dry-run, --verbose)
+flow run <file>      # Execute a .flow file (--input <json>, --input-file <path>, --verbose, --strict-env, --mock, --output-log <path>)
+flow test <file>     # Dry-run with mock services (--dry-run, --verbose, --output-log <path>)
 flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock)
 ```
 
