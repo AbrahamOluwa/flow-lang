@@ -22,7 +22,7 @@ export default defineConfig({
             { text: "Guide", link: "/guide/getting-started" },
             { text: "Reference", link: "/reference/language" },
             { text: "Examples", link: "/examples/" },
-            { text: "Playground", link: "/flow-lang/playground/", target: "_self" },
+            { text: "Playground", link: "https://abrahamoluwa.github.io/flow-lang/playground/" },
             {
                 text: "v0.2.0",
                 items: [
