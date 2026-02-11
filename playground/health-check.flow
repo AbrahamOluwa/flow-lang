@@ -1,0 +1,48 @@
+# System Health Check
+# Pings multiple services and reports their availability.
+
+config:
+    name: "Health Check"
+    version: 1
+
+services:
+    GitHub is an API at "https://api.github.com"
+    JSONPlaceholder is an API at "https://jsonplaceholder.typicode.com"
+
+workflow:
+    trigger: when a health check is requested
+
+    set healthy-count to 0
+    set total to 0
+    log "Starting system health check"
+
+    step CheckGitHub:
+        set total to total plus 1
+        get status using GitHub at "/zen"
+            save the result as github-response
+        if github-response.status is "ok":
+            set healthy-count to healthy-count plus 1
+            log "GitHub API: healthy"
+        otherwise:
+            log "GitHub API: down"
+
+    step CheckJSONPlaceholder:
+        set total to total plus 1
+        get posts using JSONPlaceholder at "/posts/1"
+            save the result as placeholder-response
+        if placeholder-response.status is "ok":
+            set healthy-count to healthy-count plus 1
+            log "JSONPlaceholder API: healthy"
+        otherwise:
+            log "JSONPlaceholder API: down"
+
+    step Summary:
+        log "Health check complete: {healthy-count} of {total} services healthy"
+        if healthy-count is total:
+            set overall to "all systems operational"
+        otherwise if healthy-count is above 0:
+            set overall to "partial outage"
+        otherwise:
+            set overall to "major outage"
+
+    complete with status overall and healthy healthy-count and total total

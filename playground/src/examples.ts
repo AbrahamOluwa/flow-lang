@@ -1,5 +1,6 @@
 import helloCode from "../hello.flow?raw";
 import discountCode from "../discount.flow?raw";
+import healthCode from "../health-check.flow?raw";
 import githubCode from "../github-lookup.flow?raw";
 import weatherCode from "../weather-alert.flow?raw";
 import cryptoCode from "../crypto-portfolio.flow?raw";
@@ -24,6 +25,12 @@ export const EXAMPLES: Example[] = [
         description: "Conditionals, math, and named steps",
         code: discountCode,
         input: '{ "total": 100, "tier": "gold" }',
+    },
+    {
+        name: "Health Check",
+        description: "No input needed — fetches from APIs and processes responses",
+        code: healthCode,
+        input: "{}",
     },
     {
         name: "GitHub User Lookup",
