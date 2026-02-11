@@ -60,6 +60,7 @@ flow run <file> [options]
 | `--verbose` | Show detailed execution logs |
 | `--strict-env` | Fail if any referenced `env` variables are missing |
 | `--mock` | Use mock services instead of real connectors |
+| `--output-log <path>` | Write structured JSON log to a file |
 
 ### Examples
 
@@ -161,6 +162,7 @@ flow test <file> [options]
 |---|---|
 | `--dry-run` | Show what would happen without executing |
 | `--verbose` | Show detailed execution logs |
+| `--output-log <path>` | Write structured JSON log to a file |
 
 ### Examples
 

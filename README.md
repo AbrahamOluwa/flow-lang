@@ -81,8 +81,10 @@ flow run <file> --input-file data.csv      # Load input from JSON, CSV, or Excel
 flow run <file> --verbose                  # Show detailed execution log
 flow run <file> --mock                     # Use mock services instead of real APIs
 flow run <file> --strict-env               # Error on missing environment variables
+flow run <file> --output-log run.json      # Write structured JSON log to file
 flow test <file>                           # Dry-run with mock services
 flow test <file> --verbose                 # Mock dry-run with execution log
+flow test <file> --output-log test.json    # Write structured JSON log to file
 flow serve <file-or-dir>                   # Start webhook server
 flow serve <file-or-dir> --port 4000       # Custom port (default: 3000)
 ```
@@ -279,6 +281,17 @@ The `examples/` directory has complete workflows:
 - **order-processing.flow** — Inventory check, payment, and confirmation
 - **loan-application.flow** — Full pipeline: identity, credit, AI risk assessment, fraud screening, and approval
 - **github-api.flow** — Authenticated GitHub API calls with custom headers
+- **stripe-checkout.flow** — Stripe payment processing with status checks
+- **slack-notification.flow** — Slack webhook notifications
+- **sendgrid-email.flow** — SendGrid transactional email delivery
+
+## Editor Support
+
+The [Flow VS Code Extension](https://github.com/AbrahamOluwa/flow-lang/tree/main/flow-vscode) provides syntax highlighting and code snippets for `.flow` files. Install it from the `.vsix` file in the `flow-vscode/` directory:
+
+1. Run `cd flow-vscode && npx @vscode/vsce package` to build the extension
+2. In VS Code, open the Command Palette and select "Install from VSIX..."
+3. Select the generated `flow-lang-0.1.0.vsix` file
 
 ## Contributing
 
@@ -290,7 +303,7 @@ npm run build
 npm run test
 ```
 
-The test suite uses [Vitest](https://vitest.dev/) with 449 tests across all pipeline stages.
+The test suite uses [Vitest](https://vitest.dev/) with 468 tests across all pipeline stages.
 
 ## License
 

@@ -23,7 +23,7 @@ export default defineConfig({
             { text: "Reference", link: "/reference/language" },
             { text: "Examples", link: "/examples/" },
             {
-                text: "v0.1.0",
+                text: "v0.2.0",
                 items: [
                     { text: "Changelog", link: "https://github.com/AbrahamOluwa/flow-lang/releases" },
                     { text: "npm", link: "https://www.npmjs.com/package/flow-lang" },
