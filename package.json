@@ -1,6 +1,6 @@
 {
     "name": "flow-lang",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "A domain-specific language for AI agent and workflow orchestration",
     "type": "module",
     "main": "dist/cli/index.js",
