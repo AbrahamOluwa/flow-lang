@@ -1,5 +1,5 @@
 # GitHub User Lookup
-# Fetches a GitHub user's profile and checks their activity.
+# Fetches a GitHub user's profile and summarizes their activity.
 
 config:
     name: "GitHub User Lookup"
@@ -12,20 +12,29 @@ workflow:
     trigger: when a username is provided
 
     set username to request.username
+    set repos to request.repos
+    set followers to request.followers
     log "Looking up GitHub user: {username}"
 
     get profile using GitHub at "/users/{username}"
         save the result as profile
 
-    set repos to profile.public-repos
-    set followers to profile.followers
-    log "Found {repos} public repos, {followers} followers"
+    log "Profile fetched for {username}"
+    log "Public repos: {repos}, Followers: {followers}"
 
-    if repos is above 50:
-        set activity to "power user"
-    otherwise if repos is above 10:
-        set activity to "active contributor"
-    otherwise:
-        set activity to "getting started"
+    step ClassifyUser:
+        if repos is above 50:
+            set activity to "power user"
+        otherwise if repos is above 10:
+            set activity to "active contributor"
+        otherwise:
+            set activity to "getting started"
 
-    complete with username username and repos repos and followers followers and activity activity
+    step CheckPopularity:
+        if followers is above 1000:
+            set popular to true
+            log "{username} is a popular developer!"
+        otherwise:
+            set popular to false
+
+    complete with username username and activity activity and repos repos and followers followers and popular popular

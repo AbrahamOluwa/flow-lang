@@ -1,5 +1,5 @@
 # Crypto Portfolio Tracker
-# Loops through a list of coins and calculates total portfolio value.
+# Calculates total portfolio value from coin holdings and prices.
 
 config:
     name: "Crypto Portfolio"
@@ -13,20 +13,30 @@ workflow:
 
     set coins to request.coins
     set total-value to 0
-    log "Checking prices for portfolio"
+    set coin-count to 0
+    log "Calculating portfolio value"
 
     for each coin in coins:
         set name to coin.name
         set amount to coin.amount
-        get price using CoinGecko at "/simple/price" with ids name and vs-currencies "usd"
-            save the result as price-data
-        set coin-value to amount times price-data.usd
+        set price to coin.price
+
+        get latest using CoinGecko at "/simple/price" with ids name and vs-currencies "usd"
+            save the result as market-data
+
+        set coin-value to amount times price
         set total-value to total-value plus coin-value
-        log "{name}: {amount} coins worth {coin-value} USD"
+        set coin-count to coin-count plus 1
+        log "{name}: {amount} coins at {price} USD = {coin-value} USD"
 
-    if total-value is above 10000:
-        log "Portfolio above 10k threshold"
-    otherwise:
-        log "Portfolio below 10k threshold"
+    log "Total portfolio value: {total-value} USD"
 
-    complete with total total-value and coin-count coins.count
+    step Evaluate:
+        if total-value is above 50000:
+            set rating to "whale"
+        otherwise if total-value is above 10000:
+            set rating to "solid portfolio"
+        otherwise:
+            set rating to "growing"
+
+    complete with total total-value and coins coin-count and rating rating

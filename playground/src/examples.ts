@@ -29,19 +29,19 @@ export const EXAMPLES: Example[] = [
         name: "GitHub User Lookup",
         description: "GitHub API, conditionals on response data",
         code: githubCode,
-        input: '{ "username": "octocat" }',
+        input: '{ "username": "octocat", "repos": 42, "followers": 12500 }',
     },
     {
         name: "Weather Alert",
         description: "Multi-service workflow with Slack notifications",
         code: weatherCode,
-        input: '{ "city": "Lagos", "threshold": 35 }',
+        input: '{ "city": "Lagos", "temp": 38, "condition": "clear", "threshold": 35 }',
     },
     {
         name: "Crypto Portfolio",
         description: "Loops, running totals, CoinGecko API",
         code: cryptoCode,
-        input: '{ "coins": [{ "name": "bitcoin", "amount": 0.5 }, { "name": "ethereum", "amount": 10 }, { "name": "solana", "amount": 100 }] }',
+        input: '{ "coins": [{ "name": "bitcoin", "amount": 0.5, "price": 97000 }, { "name": "ethereum", "amount": 10, "price": 3200 }, { "name": "solana", "amount": 100, "price": 145 }] }',
     },
     {
         name: "Error Demo",

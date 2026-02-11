@@ -1,5 +1,5 @@
 # Weather Alert System
-# Checks current weather conditions and decides whether to send an alert.
+# Checks weather conditions and decides whether to send a notification.
 
 config:
     name: "Weather Alert"
@@ -13,21 +13,35 @@ workflow:
     trigger: when a weather check is requested
 
     set city to request.city
+    set temp to request.temp
+    set condition to request.condition
     set threshold to request.threshold
     log "Checking weather for {city}"
 
-    get conditions using Weather at "/weather" with q city and units "metric"
-        save the result as weather
+    get forecast using Weather at "/weather" with q city and units "metric"
+        save the result as forecast
 
-    set temp to weather.temp
-    set description to weather.description
-    log "Current: {temp} degrees, {description}"
+    log "Current: {temp} degrees, {condition}"
 
-    if temp is above threshold:
-        set alert to "Heat warning in {city}: {temp} degrees"
-        log "Sending alert: {alert}"
-        send notification using Slack at "/chat.postMessage" with text alert and channel "#weather-alerts"
-        complete with status "alert-sent" and message alert
-    otherwise:
-        log "Temperature is within normal range"
-        complete with status "all-clear" and temp temp and city city
+    step EvaluateConditions:
+        if temp is above threshold:
+            set alert to "Heat warning in {city}: {temp} degrees"
+            set severity to "high"
+        otherwise if condition is "storm":
+            set alert to "Storm warning in {city}: {condition}"
+            set severity to "high"
+        otherwise if temp is below 0:
+            set alert to "Freeze warning in {city}: {temp} degrees"
+            set severity to "medium"
+        otherwise:
+            set alert to "none"
+            set severity to "low"
+
+    step NotifyIfNeeded:
+        if alert is not "none":
+            log "Sending alert: {alert}"
+            send notification using Slack at "/chat.postMessage" with text alert and channel "#weather-alerts"
+            complete with status "alert-sent" and message alert and severity severity
+        otherwise:
+            log "No alert needed — conditions are normal"
+            complete with status "all-clear" and temp temp and city city
