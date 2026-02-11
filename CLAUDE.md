@@ -27,6 +27,7 @@
 | 11. VS Code Extension | Complete | — | TextMate grammar, 8 snippets, language config, packaged .vsix |
 | 12. Structured Logging | Complete | 12 | `durationMs` on log entries, `--output-log` JSON file output |
 | 13. Docs Site | Complete | — | VitePress + GitHub Pages |
+| Online Playground | Complete | — | Browser-based editor + interpreter, Monaco, Vite, GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 
 **Tests passing: 468 (phases 1–17 + input-file + logging)**

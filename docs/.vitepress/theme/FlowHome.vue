@@ -39,11 +39,11 @@ onMounted(() => {
                 </p>
 
                 <div class="fh-hero-actions fade-in">
-                    <a href="/guide/getting-started" class="fh-btn-primary"
+                    <a href="/flow-lang/guide/getting-started" class="fh-btn-primary"
                         >Get started &rarr;</a
                     >
-                    <a href="#solution" class="fh-btn-secondary"
-                        >See it in action</a
+                    <a href="/flow-lang/playground/" class="fh-btn-secondary"
+                        >Try in Playground</a
                     >
                 </div>
 

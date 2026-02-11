@@ -1,0 +1,15 @@
+config:
+    name: "Typo Test"
+    version: 1
+
+services:
+    GitHub is an API at "https://api.github.com"
+
+workflow:
+    trigger: when something happens
+
+    set name to "Alice"
+    log "Hello, {naem}"
+    get data using Githib at "/users/octocat"
+        save the result as profile
+    complete with name name

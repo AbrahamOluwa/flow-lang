@@ -1,0 +1,27 @@
+# Discount Calculator
+# Calculates the final price based on order total and customer tier.
+
+config:
+    name: "Discount Calculator"
+    version: 1
+
+workflow:
+    trigger: when an order is submitted
+
+    set total to request.total
+    set tier to request.tier
+    log "Order total: {total}, Customer tier: {tier}"
+
+    step ApplyDiscount:
+        if tier is "gold":
+            set discount to total times 0.20
+        otherwise if tier is "silver":
+            set discount to total times 0.10
+        otherwise:
+            set discount to 0
+
+    step CalculateFinal:
+        set final-price to total minus discount
+        log "Discount: {discount}, Final price: {final-price}"
+
+    complete with original total and discount discount and final final-price

@@ -1,0 +1,11 @@
+config:
+    name: "Hello World"
+    version: 1
+
+workflow:
+    trigger: when a name is provided
+
+    set greeting to "Hello, {request.name}!"
+    log greeting
+
+    complete with message greeting

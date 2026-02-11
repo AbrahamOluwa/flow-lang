@@ -29,6 +29,10 @@ jobs:
 
       - run: npx vitepress build docs
 
+      - run: cd playground && npm ci
+
+      - run: cd playground && npx vite build
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/.vitepress/dist

@@ -22,6 +22,7 @@ export default defineConfig({
             { text: "Guide", link: "/guide/getting-started" },
             { text: "Reference", link: "/reference/language" },
             { text: "Examples", link: "/examples/" },
+            { text: "Playground", link: "/playground/" },
             {
                 text: "v0.2.0",
                 items: [
