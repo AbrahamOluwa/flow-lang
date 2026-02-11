@@ -1,0 +1,31 @@
+# GitHub User Lookup
+# Fetches a GitHub user's profile and checks their activity.
+
+config:
+    name: "GitHub User Lookup"
+    version: 1
+
+services:
+    GitHub is an API at "https://api.github.com"
+
+workflow:
+    trigger: when a username is provided
+
+    set username to request.username
+    log "Looking up GitHub user: {username}"
+
+    get profile using GitHub at "/users/{username}"
+        save the result as profile
+
+    set repos to profile.public-repos
+    set followers to profile.followers
+    log "Found {repos} public repos, {followers} followers"
+
+    if repos is above 50:
+        set activity to "power user"
+    otherwise if repos is above 10:
+        set activity to "active contributor"
+    otherwise:
+        set activity to "getting started"
+
+    complete with username username and repos repos and followers followers and activity activity

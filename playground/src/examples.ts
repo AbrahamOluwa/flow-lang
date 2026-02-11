@@ -1,8 +1,9 @@
 import helloCode from "../hello.flow?raw";
 import discountCode from "../discount.flow?raw";
+import githubCode from "../github-lookup.flow?raw";
+import weatherCode from "../weather-alert.flow?raw";
+import cryptoCode from "../crypto-portfolio.flow?raw";
 import typoCode from "../typo.flow?raw";
-import emailCode from "../../examples/email-verification.flow?raw";
-import orderCode from "../../examples/order-processing.flow?raw";
 
 export interface Example {
     name: string;
@@ -25,16 +26,22 @@ export const EXAMPLES: Example[] = [
         input: '{ "total": 100, "tier": "gold" }',
     },
     {
-        name: "Email Verification",
-        description: "Service calls and conditionals",
-        code: emailCode,
-        input: '{ "signup": { "email": "ada@example.com" } }',
+        name: "GitHub User Lookup",
+        description: "GitHub API, conditionals on response data",
+        code: githubCode,
+        input: '{ "username": "octocat" }',
     },
     {
-        name: "Order Processing",
-        description: "Loops, AI agents, retry logic",
-        code: orderCode,
-        input: '{ "order": { "id": "ORD-001", "items": ["widget", "gadget"], "subtotal": 150 } }',
+        name: "Weather Alert",
+        description: "Multi-service workflow with Slack notifications",
+        code: weatherCode,
+        input: '{ "city": "Lagos", "threshold": 35 }',
+    },
+    {
+        name: "Crypto Portfolio",
+        description: "Loops, running totals, CoinGecko API",
+        code: cryptoCode,
+        input: '{ "coins": [{ "name": "bitcoin", "amount": 0.5 }, { "name": "ethereum", "amount": 10 }, { "name": "solana", "amount": 100 }] }',
     },
     {
         name: "Error Demo",

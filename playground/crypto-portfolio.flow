@@ -1,0 +1,32 @@
+# Crypto Portfolio Tracker
+# Loops through a list of coins and calculates total portfolio value.
+
+config:
+    name: "Crypto Portfolio"
+    version: 1
+
+services:
+    CoinGecko is an API at "https://api.coingecko.com/api/v3"
+
+workflow:
+    trigger: when portfolio check is requested
+
+    set coins to request.coins
+    set total-value to 0
+    log "Checking prices for portfolio"
+
+    for each coin in coins:
+        set name to coin.name
+        set amount to coin.amount
+        get price using CoinGecko at "/simple/price" with ids name and vs-currencies "usd"
+            save the result as price-data
+        set coin-value to amount times price-data.usd
+        set total-value to total-value plus coin-value
+        log "{name}: {amount} coins worth {coin-value} USD"
+
+    if total-value is above 10000:
+        log "Portfolio above 10k threshold"
+    otherwise:
+        log "Portfolio below 10k threshold"
+
+    complete with total total-value and coin-count coins.count

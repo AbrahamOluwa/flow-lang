@@ -1,0 +1,33 @@
+# Weather Alert System
+# Checks current weather conditions and decides whether to send an alert.
+
+config:
+    name: "Weather Alert"
+    version: 1
+
+services:
+    Weather is an API at "https://api.openweathermap.org/data/2.5"
+    Slack is an API at "https://slack.com/api"
+
+workflow:
+    trigger: when a weather check is requested
+
+    set city to request.city
+    set threshold to request.threshold
+    log "Checking weather for {city}"
+
+    get conditions using Weather at "/weather" with q city and units "metric"
+        save the result as weather
+
+    set temp to weather.temp
+    set description to weather.description
+    log "Current: {temp} degrees, {description}"
+
+    if temp is above threshold:
+        set alert to "Heat warning in {city}: {temp} degrees"
+        log "Sending alert: {alert}"
+        send notification using Slack at "/chat.postMessage" with text alert and channel "#weather-alerts"
+        complete with status "alert-sent" and message alert
+    otherwise:
+        log "Temperature is within normal range"
+        complete with status "all-clear" and temp temp and city city
