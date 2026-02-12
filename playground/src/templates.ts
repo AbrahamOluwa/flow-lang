@@ -320,6 +320,96 @@ workflow:
             return { code, input };
         },
     },
+
+    // 6. Full Pipeline
+    {
+        id: "full-pipeline",
+        name: "Full Pipeline",
+        description: "API call, data processing, conditionals, and AI analysis in one workflow",
+        iconColor: "#6366F1",
+        iconPath: "M1 2h14v2H1V2zm0 4h8v2H1V6zm0 4h14v2H1v-2zm10-4h4v2h-4V6z",
+        fields: [
+            { id: "workflowName", label: "Workflow name", type: "text", placeholder: "My Pipeline", defaultValue: "Order Review Pipeline" },
+            { id: "apiName", label: "API service name", type: "text", placeholder: "Stripe, Shopify, etc.", defaultValue: "OrderAPI" },
+            { id: "apiUrl", label: "API base URL", type: "text", placeholder: "https://api.example.com", defaultValue: "https://api.example.com" },
+            { id: "aiName", label: "AI service name", type: "text", placeholder: "Reviewer, Analyst, etc.", defaultValue: "Reviewer" },
+            { id: "itemsField", label: "Items list field", type: "text", placeholder: "items, products, etc.", defaultValue: "items", helpText: "A list in the request to loop over and total up" },
+            { id: "valueField", label: "Value field per item", type: "text", placeholder: "price, amount, etc.", defaultValue: "price" },
+            { id: "threshold", label: "Review threshold", type: "text", placeholder: "Amount that triggers AI review", defaultValue: "500" },
+        ],
+        generate(v) {
+            const name = v["workflowName"] || "Order Review Pipeline";
+            const api = v["apiName"] || "OrderAPI";
+            const apiUrl = v["apiUrl"] || "https://api.example.com";
+            const ai = v["aiName"] || "Reviewer";
+            const items = sanitizeId(v["itemsField"] || "items");
+            const valueField = sanitizeId(v["valueField"] || "price");
+            const threshold = v["threshold"] || "500";
+
+            const code = `# ${name}
+# Generated from the Full Pipeline template.
+# Combines: API calls, loops, conditionals, and AI analysis.
+
+config:
+    name: "${name}"
+    version: 1
+
+services:
+    ${api} is an API at "${apiUrl}"
+    ${ai} is an AI using "anthropic/claude-sonnet-4-20250514"
+
+workflow:
+    trigger: when a request is received
+
+    set ${items} to request.${items}
+    set order-id to request.order-id
+    log "Processing order {order-id}"
+
+    # Step 1: Fetch order details from the API
+    step FetchOrder:
+        get order using ${api} at "/orders/{order-id}"
+            save the result as order-data
+        log "Order data retrieved"
+
+    # Step 2: Loop through items and calculate total
+    step CalculateTotal:
+        set total to 0
+        set count to 0
+        for each item in ${items}:
+            set total to total plus item.${valueField}
+            set count to count plus 1
+            log "Item: {item.${valueField}}"
+        log "Total: {total} from {count} items"
+
+    # Step 3: Check if the order needs AI review
+    step EvaluateOrder:
+        if total is above ${threshold}:
+            log "High-value order detected, requesting AI review"
+
+            ask ${ai} to review this order for potential fraud or issues
+                save the result as review
+                save the confidence as confidence
+
+            log "AI review complete, confidence: {confidence}"
+
+            if confidence is below 0.5:
+                set status to "flagged"
+                log "Order flagged for manual review"
+            otherwise:
+                set status to "approved"
+                log "Order approved by AI"
+        otherwise:
+            set status to "auto-approved"
+            set review to "No review needed"
+            set confidence to 1
+            log "Order auto-approved (below threshold)"
+
+    complete with order-id order-id and total total and count count and status status and review review
+`;
+            const input = `{ "order-id": "ORD-1234", "${items}": [{ "${valueField}": 250 }, { "${valueField}": 175 }, { "${valueField}": 320 }] }`;
+            return { code, input };
+        },
+    },
 ];
 
 // --- SVG Icons ---
@@ -356,8 +446,13 @@ function renderCards(container: HTMLElement, onSelect: (template: Template) => v
         grid.appendChild(card);
     }
 
+    const note = document.createElement("div");
+    note.className = "template-note";
+    note.innerHTML = `This playground uses simulated responses. To connect to real APIs and AI models, use the CLI: <code>npm install -g flow-lang</code>`;
+
     container.innerHTML = "";
     container.appendChild(grid);
+    container.appendChild(note);
 }
 
 function renderForm(

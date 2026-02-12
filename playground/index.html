@@ -45,7 +45,13 @@
                 <button class="tab" data-tab="input">Input JSON</button>
             </div>
             <div id="tab-output" class="tab-content active">
-                <pre id="output-content"><span class="output-muted">Click "Run" or press Ctrl+Enter to execute your Flow program.</span></pre>
+                <pre id="output-content"><span class="output-muted">Click "Run" or press Ctrl+Enter to execute your Flow program.
+
+This playground uses simulated responses for API, AI, and webhook calls.
+To run workflows against real services, install the CLI:
+
+  npm install -g flow-lang
+  flow run your-workflow.flow --input '{"key": "value"}'</span></pre>
             </div>
             <div id="tab-log" class="tab-content">
                 <pre id="log-content"><span class="output-muted">Log entries will appear here after execution.</span></pre>

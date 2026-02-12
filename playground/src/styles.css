@@ -624,6 +624,22 @@ body {
     background: var(--accent-light);
 }
 
+/* ===== Template Note ===== */
+
+.template-note {
+    padding: 12px 24px 20px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    text-align: center;
+}
+
+.template-note code {
+    color: var(--cyan);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+}
+
 /* ===== Responsive ===== */
 
 @media (max-width: 900px) {
