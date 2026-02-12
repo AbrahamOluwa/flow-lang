@@ -2,6 +2,7 @@ import "./styles.css";
 import { createEditor, monaco } from "./editor.js";
 import { EXAMPLES } from "./examples.js";
 import { runFlow } from "./runner.js";
+import { initTemplateBuilder } from "./templates.js";
 import type { RunResult } from "./runner.js";
 import type { LogEntry } from "@flow/types/index.js";
 
@@ -30,6 +31,15 @@ select.addEventListener("change", () => {
         editor.setValue(example.code);
         inputTextarea.value = example.input;
     }
+});
+
+// --- Template builder ---
+const templateBuilder = initTemplateBuilder();
+templateBuilder.onGenerate((code, input) => {
+    editor.setValue(code);
+    inputTextarea.value = input;
+    select.value = "";
+    showToast("Template loaded — edit and run!");
 });
 
 // --- Tab switching ---
