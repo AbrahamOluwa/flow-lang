@@ -274,4 +274,4 @@ Flow has a VS Code extension that adds syntax highlighting, snippets, and auto-i
 - [AI Integration](/guide/ai-integration) — Use AI models in your workflows
 - [Language Reference](/reference/language) — Complete syntax guide
 - [Examples](/examples/) — Real-world workflows you can learn from
-- [Playground](/playground/) — Try Flow in your browser, no install needed
+- [Playground](https://abrahamoluwa.github.io/flow-lang/playground/) — Try Flow in your browser, no install needed
