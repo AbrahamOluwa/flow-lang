@@ -412,7 +412,7 @@ onMounted(() => {
                         class="fh-btn-primary"
                         >Star on GitHub &rarr;</a
                     >
-                    <a href="/guide/getting-started" class="fh-btn-secondary"
+                    <a href="/flow-lang/guide/getting-started" class="fh-btn-secondary"
                         >Read the docs</a
                     >
                 </div>
