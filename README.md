@@ -1,54 +1,44 @@
 # Flow
 
+**Business rules that run, not rot.**
+
+Flow is a language for writing business logic as plain text that executes. A `.flow` file is simultaneously a process document anyone can read, an executable program, a versioned artifact, and an audit trail. One file. No drift between what the rule says and what the code does.
+
 ```
-# Order Processing Workflow
-# This is real, runnable Flow code.
-
-config:
-    name: "Order Processing"
-    version: 1
-    timeout: 5 minutes
-
 services:
-    Inventory is an API at "https://inventory.example.com/api"
+    CreditBureau is an API at "https://credit.example.com/api"
+    SendGrid is an API at "https://api.sendgrid.com/v3"
         with headers:
-            Authorization: "Bearer {env.INVENTORY_KEY}"
-    Stripe is a plugin "stripe-payments"
-    Notifier is an AI using "openai/gpt-4o"
+            Authorization: "Bearer {env.SENDGRID_API_KEY}"
 
 workflow:
-    trigger: when a new order is placed
+    trigger: when a loan application is submitted
 
-    set order-id to order.id
-    set items to order.items
-    log "Processing order {order-id}"
+    step Check Credit:
+        fetch credit report using CreditBureau with bvn application.bvn
+            save the result as report
 
-    step CheckInventory:
-        for each item in items:
-            check stock using Inventory with product item
+        if report.score is below 350:
+            send rejection using SendGrid to application.email
+            reject with "Credit score too low"
 
-    step CalculateTotal:
-        set subtotal to order.subtotal
-        set tax to subtotal times 0.08
-        set total to subtotal plus tax
-
-    step ChargePayment:
-        charge payment using Stripe with amount total and currency "usd"
-            save the status as payment-status
-            on failure:
-                retry 3 times waiting 5 seconds
-                if still failing:
-                    reject with "We could not process your payment. Please try again."
-
-    step SendConfirmation:
-        ask Notifier to write a friendly order confirmation
-            save the result as confirmation
-        log confirmation
-
-    complete with status "processed" and order-id order-id and total total
+    step Approve:
+        log "Approved: {application.name}, score {report.score}"
+        complete with status "approved" and applicant application.name
 ```
 
-**Flow is a programming language for people who aren't programmers.** It lets operations teams, business analysts, and product managers write automated workflows in structured English — no semicolons, no brackets, no classes. If you can write a process document, you can write a Flow program.
+This file **is** the rule. It runs. It's versioned. Anyone on the team can read it.
+
+## Why Flow exists
+
+In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either.
+
+Every change goes through engineering. "Change the threshold from 300 to 350" becomes a Jira ticket, a sprint, and a deploy — for a one-line change.
+
+Flow eliminates this gap:
+- **Operations teams** write and maintain `.flow` files. When a rule changes, they change the file and submit a PR.
+- **Engineers** set up the services and infrastructure, then review PRs. They stop being bottlenecked by business logic changes.
+- **Compliance** can read the actual rules. Hand them the file — it reads like structured English.
 
 ## Installation
 
@@ -58,84 +48,63 @@ npm install -g flow-lang
 
 Requires Node.js 18 or later.
 
-## Quick Start
+## Quick start
 
 ```bash
-# Check a file for errors
+# Check a file for errors (no execution)
 flow check my-workflow.flow
 
 # Run with mock services (no real API calls)
-flow test my-workflow.flow
+flow test my-workflow.flow --dry-run --verbose
 
 # Run for real
-flow run my-workflow.flow --input '{"order": {"id": "123", "items": ["A", "B"], "subtotal": 100}}'
+flow run my-workflow.flow --input '{"application": {"name": "Ada", "bvn": "12345"}}'
+
+# Serve as a webhook endpoint
+flow serve my-workflow.flow --port 3000
 ```
 
-## CLI Commands
-
-```bash
-flow check <file>                          # Parse and validate (no execution)
-flow run <file>                            # Execute a .flow file
-flow run <file> --input '<json>'           # Pass trigger data as JSON
-flow run <file> --input-file data.csv      # Load input from JSON, CSV, or Excel file
-flow run <file> --verbose                  # Show detailed execution log
-flow run <file> --mock                     # Use mock services instead of real APIs
-flow run <file> --strict-env               # Error on missing environment variables
-flow run <file> --output-log run.json      # Write structured JSON log to file
-flow test <file>                           # Dry-run with mock services
-flow test <file> --verbose                 # Mock dry-run with execution log
-flow test <file> --output-log test.json    # Write structured JSON log to file
-flow serve <file-or-dir>                   # Start webhook server
-flow serve <file-or-dir> --port 4000       # Custom port (default: 3000)
-```
-
-## Language Overview
+## The language
 
 Flow has exactly **7 constructs** and **5 data types**. That's the whole language.
 
-### Service Calls
-
-Call real REST APIs, AI models, webhooks, or plugins:
+### Service calls
 
 ```
 verify email using EmailVerifier with address email
 get user using GitHub at "/users/octocat"
-charge payment using Stripe with amount total and currency "usd"
-    save the result as payment
+    save the result as user
     save the status as status-code
-    save the response headers as resp-headers
+    on failure:
+        retry 3 times waiting 5 seconds
 ```
 
 ### Conditions
 
 ```
-if requested-amount is above 50000:
-    set risk-adjustment to 1.5
-otherwise if requested-amount is above 20000:
-    set risk-adjustment to 0.75
+if total is above 5000:
+    set review to "manual"
+otherwise if total is above 1000:
+    set review to "automated"
 otherwise:
-    set risk-adjustment to 0
+    set review to "none"
 ```
 
-### AI Requests
-
-Ask an AI model to do something, and save the response:
+### AI requests
 
 ```
-ask RiskAnalyst to assess the risk level of this loan application
-    save the result as risk-assessment
-    save the confidence as risk-confidence
+ask Analyst to assess the risk level of this application
+    save the result as assessment
 ```
 
 Works with OpenAI and Anthropic models out of the box.
 
-### Variables
+### Variables and math
 
 ```
 set name to "Alice"
 set total to subtotal plus tax
-set monthly-payment to amount times rate divided by 1200
-set monthly-payment to monthly-payment rounded to 2
+set monthly to amount divided by 12 rounded to 2 places
 ```
 
 ### Loops
@@ -145,25 +114,23 @@ for each item in order.items:
     check stock using Inventory with product item
 ```
 
-### Named Steps
-
-Organize your workflow into labeled sections:
+### Named steps
 
 ```
 step VerifyIdentity:
-    verify identity using IdentityService with applicant applicant-id
+    verify identity using IdentityService with id applicant-id
     log "Identity verified"
 ```
 
 ### Output
 
 ```
-complete with status "approved" and rate final-rate
-reject with "We could not verify your identity at this time."
+complete with status "approved" and total total
+reject with "Credit score too low"
 log "Processing order {order-id}"
 ```
 
-### Comparisons and Math
+### Comparisons
 
 Flow uses English words instead of symbols:
 
@@ -180,86 +147,45 @@ Flow uses English words instead of symbols:
 | `*` | `times` |
 | `/` | `divided by` |
 
-### Data Types
+### Data types
 
 | Type | Example |
 |---|---|
 | Text | `"hello"`, `"Order {id} confirmed"` |
-| Number | `42`, `3.14`, `0.08` |
+| Number | `42`, `3.14` |
 | Boolean | `true`, `false` |
 | List | `order.items` |
-| Record | `order` (accessed via dot notation: `order.id`) |
+| Record | `order` (dot access: `order.id`) |
 
-There are no nulls. If a value doesn't exist, it's `empty` — and you can check for it with `is empty` or `is not empty`.
+No nulls. Missing values are `empty` — check with `is empty` or `is not empty`.
 
 ## Services
 
-Flow connects to real external services:
-
 ```
 services:
-    # REST APIs — verb inference maps English to HTTP methods
+    # REST APIs with auth headers
     GitHub is an API at "https://api.github.com"
         with headers:
             Authorization: "token {env.GITHUB_TOKEN}"
-            Accept: "application/vnd.github.v3+json"
 
-    # AI agents — OpenAI and Anthropic supported
+    # AI models (OpenAI and Anthropic)
     Analyst is an AI using "openai/gpt-4o"
-    Claude is an AI using "anthropic/claude-sonnet-4-20250514"
 
-    # Webhooks — always POST
-    SlackNotifier is a webhook at "https://hooks.slack.com/..."
+    # Webhooks
+    Slack is a webhook at "https://hooks.slack.com/..."
 
-    # Plugins — stub connector for future plugin system
+    # Plugins
     Stripe is a plugin "stripe-payments"
 ```
 
-### HTTP Headers
+API keys go in a `.env` file. Flow loads it automatically.
 
-Services can include custom headers for authentication and other needs. Header values support string interpolation with environment variables:
+## Error messages
 
-```
-services:
-    Stripe is an API at "https://api.stripe.com/v1"
-        with headers:
-            Authorization: "Bearer {env.STRIPE_SECRET_KEY}"
-            Content-Type: "application/x-www-form-urlencoded"
-```
-
-### Response Metadata
-
-After a service call, you can inspect the HTTP status code and response headers:
+Flow catches mistakes before execution and explains them in plain English:
 
 ```
-get user using GitHub at "/users/{username}"
-    save the result as user
-    save the status as status-code
-    save the response headers as resp-headers
-
-if status-code is 200:
-    log "Found user: {user.name}"
-    log "Rate limit remaining: {resp-headers.x-ratelimit-remaining}"
-```
-
-### API Keys
-
-Create a `.env` file in your project root:
-
-```
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GITHUB_TOKEN=ghp_...
-```
-
-Flow loads `.env` automatically via dotenv. Access any environment variable with `env.VARIABLE_NAME`.
-
-## Error Messages
-
-Flow doesn't show stack traces. Every error is written in plain English with the exact line, what went wrong, and how to fix it:
-
-```
-Error in loan-application.flow, line 12:
+Error in loan-review.flow, line 12:
 
     verify the email using EmailChecker
 
@@ -267,31 +193,49 @@ Error in loan-application.flow, line 12:
     in your services block.
 
     Did you mean "EmailVerifier"?
-
-    Hint: Every service must be declared at the top of your file:
-        services:
-            EmailChecker is an API at "https://..."
 ```
+
+## What Flow can't do (yet)
+
+We'd rather be upfront:
+
+- **No parallel execution** — steps run sequentially
+- **No pause/resume** — workflows run start to finish
+- **No while loops** — only `for each` over lists
+- **No imports** — each `.flow` file is self-contained
+- **No persistent state** — Flow doesn't store data between runs
+- **No custom functions** — what you see is what runs
+
+Some of these are on the roadmap. Some are deliberate constraints.
 
 ## Examples
 
-The `examples/` directory has complete workflows:
+The [`examples/`](examples/) directory has complete workflows:
 
-- **email-verification.flow** — Validates a submitted email address
-- **order-processing.flow** — Inventory check, payment, and confirmation
-- **loan-application.flow** — Full pipeline: identity, credit, AI risk assessment, fraud screening, and approval
-- **github-api.flow** — Authenticated GitHub API calls with custom headers
-- **stripe-checkout.flow** — Stripe payment processing with status checks
-- **slack-notification.flow** — Slack webhook notifications
-- **sendgrid-email.flow** — SendGrid transactional email delivery
+- **email-verification.flow** — Email validation with conditionals
+- **order-processing.flow** — Inventory, payment, AI confirmation
+- **github-scout.flow** — GitHub API with popularity scoring
+- **stripe-checkout.flow** — Stripe payments with retry and Slack notification
+- **slack-notification.flow** — Deployment notifications
+- **sendgrid-email.flow** — Transactional email with status verification
+- **loan-application.flow** — Full pipeline: credit, risk, fraud, approval
 
-## Editor Support
+## Documentation
 
-The [Flow VS Code Extension](https://github.com/AbrahamOluwa/flow-lang/tree/main/flow-vscode) provides syntax highlighting and code snippets for `.flow` files. Install it from the `.vsix` file in the `flow-vscode/` directory:
+- [Landing page](https://abrahamoluwa.github.io/flow-lang/) — What Flow is and why it exists
+- [Getting Started](https://abrahamoluwa.github.io/flow-lang/guide/getting-started) — Two-track guide for engineers and ops teams
+- [Language Reference](https://abrahamoluwa.github.io/flow-lang/reference/language) — Complete syntax
+- [Playground](https://abrahamoluwa.github.io/flow-lang/playground/) — Try Flow in the browser, no install
 
-1. Run `cd flow-vscode && npx @vscode/vsce package` to build the extension
-2. In VS Code, open the Command Palette and select "Install from VSIX..."
-3. Select the generated `flow-lang-0.1.0.vsix` file
+## Editor support
+
+The [Flow VS Code Extension](https://github.com/AbrahamOluwa/flow-lang/tree/main/flow-vscode) adds syntax highlighting and snippets. Build and install:
+
+```bash
+cd flow-vscode && npx @vscode/vsce package
+```
+
+Then in VS Code: Command Palette → "Install from VSIX..." → select the `.vsix` file.
 
 ## Contributing
 
@@ -300,10 +244,8 @@ git clone https://github.com/AbrahamOluwa/flow-lang.git
 cd flow-lang
 npm install
 npm run build
-npm run test
+npm run test    # 468 tests across all pipeline stages
 ```
-
-The test suite uses [Vitest](https://vitest.dev/) with 468 tests across all pipeline stages.
 
 ## License
 
