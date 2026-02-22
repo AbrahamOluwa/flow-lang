@@ -1,81 +1,240 @@
 # Getting Started
 
-This guide will walk you through installing Flow and running your first workflow. It takes about 2 minutes.
+Flow has two kinds of users: **engineers** who set up the environment, and **ops teams** who write and maintain the workflow logic. Pick your track.
 
-## Prerequisites
+## For engineers
 
-Flow runs on [Node.js](https://nodejs.org/), which is a free tool that lets you run programs on your computer. If you don't have it yet:
+You'll install Flow, configure services, and set up the repo so your ops team can start writing workflows.
 
-1. Go to [nodejs.org](https://nodejs.org/)
-2. Download the **LTS** version (the big green button)
-3. Run the installer — accept all the defaults
+### 1. Install Flow
 
-You need version 18 or higher. To check, open your terminal (Command Prompt on Windows, Terminal on Mac) and type:
-
-```bash
-node --version
-```
-
-You should see something like `v20.11.0` or higher.
-
-## Install Flow
-
-Open your terminal and run:
+Flow runs on [Node.js](https://nodejs.org/) 18 or higher.
 
 ```bash
 npm install -g flow-lang
 ```
 
-This installs Flow globally on your computer. Verify it worked:
+Verify it worked:
 
 ```bash
 flow --version
 ```
 
-## Write your first workflow
+### 2. Set up a project
 
-Create a new file called `hello.flow` (you can use any text editor — Notepad, VS Code, etc.) and paste this in:
+Create a directory for your team's workflows:
+
+```bash
+mkdir workflows && cd workflows
+git init
+```
+
+Create a `.env` file for API keys and secrets (add this to `.gitignore`):
+
+```bash
+# .env
+STRIPE_SECRET_KEY=sk_test_...
+SENDGRID_API_KEY=SG...
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+```
+
+### 3. Write a starter workflow
+
+Create `order-review.flow` to give your ops team a working example:
 
 ```txt
 config:
-    name: "Hello World"
+    name: "Order Review"
     version: 1
 
+services:
+    Inventory is an API at "https://inventory.yourcompany.com/api"
+    Slack is a webhook at "https://hooks.slack.com/services/..."
+
 workflow:
-    trigger: when a name is provided
+    trigger: when a new order is submitted
 
-    set greeting to "Hello, {request.name}!"
-    log greeting
+    set order-id to request.order_id
+    set total to request.total
+    log "Reviewing order {order-id}: ${total}"
 
-    complete with message greeting
+    if total is above 5000:
+        send alert using Slack with text "Large order {order-id}: ${total} — needs manual review"
+        complete with status "flagged" and order-id order-id
+
+    check stock using Inventory with order-id order-id
+        save the result as stock
+        on failure:
+            retry 2 times waiting 5 seconds
+            if still failing:
+                reject with "Could not reach inventory system"
+
+    complete with status "approved" and order-id order-id
 ```
 
-Let's break down what this does:
+### 4. Validate and test
 
-- **config** — Gives your workflow a name and version number
-- **trigger** — Describes when this workflow should run (it's documentation for you)
-- **set greeting** — Creates a variable called `greeting` with a personalized message
-- **log** — Prints the greeting so you can see it
-- **complete with** — Returns the result when the workflow finishes
-
-## Check your workflow for errors
-
-Before running, you can check for mistakes:
+Check for errors without running:
 
 ```bash
-flow check hello.flow
+flow check order-review.flow
 ```
 
-If everything looks good:
+Test with mock services (no real API calls):
+
+```bash
+flow test order-review.flow --dry-run --verbose
+```
+
+Run with real services:
+
+```bash
+flow run order-review.flow --input '{"order_id": "ORD-123", "total": 7500}'
+```
+
+::: tip Windows users
+Windows CMD and PowerShell handle quotes differently. Use escaped double quotes:
+```bash
+flow run order-review.flow --input "{\"order_id\": \"ORD-123\", \"total\": 7500}"
+```
+:::
+
+### 5. Deploy as a webhook (optional)
+
+Turn your workflows into HTTP endpoints:
+
+```bash
+flow serve workflows/ --port 3000
+```
+
+Each `.flow` file becomes a POST endpoint. `order-review.flow` becomes `POST /order-review`:
+
+```bash
+curl -X POST http://localhost:3000/order-review \
+  -H "Content-Type: application/json" \
+  -d '{"order_id": "ORD-123", "total": 7500}'
+```
+
+### 6. Hand it off
+
+Once the repo is set up, your ops team only needs to:
+- Edit `.flow` files in any text editor (VS Code recommended — there's a [Flow extension](/guide/getting-started#vs-code-extension))
+- Submit pull requests for review
+- They never touch npm, the terminal, or service configuration
+
+Share the [ops team track below](#for-ops-teams) with them.
+
+---
+
+## For ops teams
+
+Your engineer has set up a repository with Flow. Here's how to write and change workflows.
+
+### What you'll need
+
+- A text editor (VS Code is recommended)
+- Access to the Git repository your engineer set up
+- That's it — you don't need to install anything else
+
+### The basics
+
+A `.flow` file has three sections:
+
+```txt
+config:
+    name: "My Workflow"
+    version: 1
+
+services:
+    # Your engineer has set these up — don't change
+    # them without checking with the team
+
+workflow:
+    trigger: when something happens
+
+    # Your logic goes here
+```
+
+- **config** — The name and version of your workflow
+- **services** — External systems the workflow talks to (APIs, webhooks, AI). Your engineer configures these.
+- **workflow** — The rules and logic. **This is the part you own.**
+
+### Your first change
+
+Let's say your team has a workflow that flags orders over $5,000. The business decides to change the threshold to $10,000. Open the `.flow` file and find:
+
+```txt
+if total is above 5000:
+```
+
+Change it to:
+
+```txt
+if total is above 10000:
+```
+
+That's it. Submit a pull request. Your engineer reviews it, merges it, and the new rule is live. One line changed, clear diff, no ambiguity about what the rule is.
+
+### Writing logic
+
+Here are the building blocks you'll use most:
+
+**Setting variables:**
+```txt
+set name to request.customer_name
+set total to request.amount
+```
+
+**Making decisions:**
+```txt
+if total is above 1000:
+    log "Large order"
+otherwise:
+    log "Standard order"
+```
+
+**Processing lists:**
+```txt
+for each item in request.items:
+    log "Checking: {item}"
+```
+
+**Logging:**
+```txt
+log "Processing order {order-id}"
+```
+
+**Finishing the workflow:**
+```txt
+complete with status "approved" and total total
+reject with "Order cannot be processed"
+```
+
+### Indentation matters
+
+Flow uses **4 spaces** for indentation. Everything inside a block must be indented by exactly 4 spaces:
+
+```txt
+if active:
+    log "User is active"          # 4 spaces
+    if score is above 90:
+        set grade to "A"          # 8 spaces (4 + 4)
+```
+
+In VS Code, look for "Indent Using Spaces" in the bottom status bar and set it to 4.
+
+### How to know if you made a mistake
+
+Ask your engineer to run `flow check` on your file, or if you have Flow installed locally:
+
+```bash
+flow check my-workflow.flow
+```
+
+Flow catches mistakes before anything runs and tells you exactly what's wrong:
 
 ```
-hello.flow is valid — no errors found.
-```
-
-If there's a problem, Flow tells you exactly what's wrong and suggests a fix. For example:
-
-```
-Error in hello.flow, line 7:
+Error in my-workflow.flow, line 7:
 
     log greting
 
@@ -84,113 +243,35 @@ Error in hello.flow, line 7:
     Did you mean "greeting"?
 ```
 
-## Run your workflow
+### Reading input data
 
-Now run it! The `--input` flag lets you pass data into the workflow:
-
-```bash
-flow run hello.flow --input '{"name": "Alice"}'
-```
-
-::: tip Windows users
-Windows CMD and PowerShell handle quotes differently. Use escaped double quotes instead:
-```bash
-flow run hello.flow --input "{\"name\": \"Alice\"}"
-```
-:::
-
-You should see:
-
-```
-[LOG] Hello, Alice!
-
-Workflow completed successfully.
-
-Outputs:
-  message: Hello, Alice!
-```
-
-The `{"name": "Alice"}` you passed in becomes accessible as `request.name` inside the workflow.
-
-::: tip Prefer using a file for input
-Instead of typing JSON on the command line, you can put your data in a file and use `--input-file`. This works with `.json`, `.csv`, and even `.xlsx` (Excel) files:
-
-```bash
-flow run hello.flow --input-file data.json
-flow run hello.flow --input-file customers.csv
-flow run hello.flow --input-file report.xlsx
-```
-
-See [CLI Reference — Input from a file](/reference/cli#input-from-a-file) for details.
-:::
-
-## Test with mock services
-
-If your workflow connects to external services (like APIs), you can test it without making real calls:
-
-```bash
-flow test hello.flow --dry-run --verbose
-```
-
-This runs your workflow with simulated services. It's perfect for checking that your logic is correct without affecting real systems.
-
-## Serve as a webhook
-
-You can turn any workflow into a web endpoint that responds to incoming requests:
-
-```bash
-flow serve hello.flow --port 3000
-```
-
-Then trigger it by sending a request (you can use a tool like curl, Postman, or any webhook sender):
-
-```bash
-curl -X POST http://localhost:3000 \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Alice"}'
-```
-
-## Understanding the file structure
-
-Every Flow file can have three sections (all optional):
+Data passed into your workflow is available as `request`. If someone sends `{"customer": "Alice", "amount": 500}`, you access it like:
 
 ```txt
-config:
-    name: "My Workflow"
-    version: 1
-
-services:
-    MyAPI is an API at "https://api.example.com"
-
-workflow:
-    trigger: when something happens
-
-    # Your workflow logic goes here
+set name to request.customer
+set total to request.amount
 ```
 
-- **config** — Metadata about your workflow (name, version, how long it can run)
-- **services** — Declares external services your workflow will talk to (APIs, AI models)
-- **workflow** — The actual logic that runs when the workflow is triggered
+### Tips
 
-## Important: indentation matters
-
-Flow uses **4 spaces** for indentation (not tabs). Everything inside a block must be indented by exactly 4 spaces. If you use tabs by mistake, Flow will tell you and show you how to fix it.
+- **Start by reading existing workflows.** Your engineer has set up examples. Read them before writing your own.
+- **Make small changes.** Change one rule at a time. Submit a PR. See it work. Then make the next change.
+- **Use comments to explain why.** The code shows *what* happens. Comments explain *why*:
 
 ```txt
-workflow:
-    trigger: when something happens    # 4 spaces before "trigger"
-
-    if active:
-        log "User is active"          # 8 spaces (4 + 4)
+# Compliance requires manual review for amounts over 10,000
+if total is above 10000:
+    complete with status "flagged"
 ```
 
-Most text editors can be set to insert spaces when you press Tab. In VS Code, look for "Indent Using Spaces" in the bottom status bar.
+## VS Code extension
+
+Flow has a VS Code extension that adds syntax highlighting, snippets, and auto-indentation. Your engineer can install it from the `.vsix` file in the [`flow-vscode/`](https://github.com/AbrahamOluwa/flow-lang/tree/main/flow-vscode) directory.
 
 ## Next steps
 
-Now that you have Flow running, explore these guides:
-
-- [Services](/guide/services) — Learn how to connect to external APIs and use the data
-- [AI Integration](/guide/ai-integration) — Use AI models directly in your workflows
-- [Language Reference](/reference/language) — Complete guide to every Flow feature
-- [Examples](/examples/) — Real-world workflow examples you can learn from
+- [Services](/guide/services) — How Flow connects to external APIs (for engineers)
+- [AI Integration](/guide/ai-integration) — Use AI models in your workflows
+- [Language Reference](/reference/language) — Complete syntax guide
+- [Examples](/examples/) — Real-world workflows you can learn from
+- [Playground](/playground/) — Try Flow in your browser, no install needed

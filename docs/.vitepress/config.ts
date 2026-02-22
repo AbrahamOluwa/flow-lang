@@ -8,7 +8,7 @@ export default defineConfig({
         },
     },
     title: "Flow",
-    description: "A programming language for people who aren't programmers",
+    description: "Business rules that run, not rot — write, version, and execute business logic as plain text",
     head: [
         ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
         ["meta", { name: "theme-color", content: "#6366f1" }],
