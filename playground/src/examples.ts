@@ -15,6 +15,12 @@ export interface Example {
 
 export const EXAMPLES: Example[] = [
     {
+        name: "GitHub User Lookup",
+        description: "GitHub API, conditionals on response data",
+        code: githubCode,
+        input: '{ "username": "octocat", "repos": 42, "followers": 12500 }',
+    },
+    {
         name: "Hello World",
         description: "Simple greeting with string interpolation",
         code: helloCode,
@@ -31,12 +37,6 @@ export const EXAMPLES: Example[] = [
         description: "No input needed — fetches from APIs and processes responses",
         code: healthCode,
         input: "{}",
-    },
-    {
-        name: "GitHub User Lookup",
-        description: "GitHub API, conditionals on response data",
-        code: githubCode,
-        input: '{ "username": "octocat", "repos": 42, "followers": 12500 }',
     },
     {
         name: "Weather Alert",

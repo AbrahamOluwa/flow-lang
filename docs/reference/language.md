@@ -37,7 +37,7 @@ config:
 |---|---|---|
 | `name` | Text | Display name for the workflow |
 | `version` | Number | Version number |
-| `timeout` | Duration | Maximum execution time (e.g., `5 minutes`) |
+| `timeout` | Duration | Maximum execution time (e.g., `5 minutes`) — declared but not currently enforced by the runtime; serves as documentation for your workflow's expected duration |
 
 ## Services block
 
@@ -84,7 +84,7 @@ workflow:
     trigger: when a new order is placed
 ```
 
-The trigger text is descriptive — it documents intent and is used in server metadata.
+The trigger line is a human-readable label. Flow does not parse or enforce it — it appears in logs and in the metadata returned by `flow serve` (see [Webhook Server](/guide/webhook-server#workflow-info)).
 
 ### Steps
 
@@ -98,7 +98,7 @@ step ProcessPayment:
     # logic here
 ```
 
-Steps are organizational only — they execute in order and share the same variable scope.
+Steps are organizational only — they execute in order and share the same variable scope. Steps always execute top to bottom. There is no way to skip, repeat, or call steps out of order — use `if` conditions inside a step to control what happens.
 
 ## Variables
 
@@ -193,6 +193,8 @@ The `waiting` duration is a real pause between retry attempts. You can use `seco
         retry 3 times waiting 1 minutes
 ```
 
+If you don't include `on failure`, the workflow stops immediately when a service call fails and reports the error. Add `on failure` to any service call where you want to handle errors gracefully.
+
 ## AI requests
 
 ```txt
@@ -245,6 +247,17 @@ for each item in order.items:
 
 Loop variables are scoped to the loop body — they don't leak into the outer scope.
 
+### Looping over objects
+
+Access fields on each item with dot notation:
+
+```txt
+for each person in team.members:
+    log "{person.name} — {person.role}"
+    if person.role is "lead":
+        set lead-email to person.email
+```
+
 ## Math
 
 ```txt
@@ -286,6 +299,8 @@ End the workflow with an error message:
 reject with "Invalid email address"
 ```
 
+When served as a webhook, `complete with` returns HTTP 200 and `reject with` returns HTTP 400. See [Webhook Server](/guide/webhook-server#what-comes-back) for details.
+
 ### Log
 
 Print a message during execution:
@@ -310,8 +325,9 @@ if active:
 Lines starting with `#` are comments:
 
 ```txt
-# This is a comment
-set name to "Alice"  # Inline comments are not supported
+# This is a comment (must be on its own line)
+set name to "Alice"
+# Comments cannot go at the end of a line
 ```
 
 ## Environment variables
@@ -321,4 +337,16 @@ Access environment variables with the `env` prefix:
 ```txt
 set api-key to env.API_KEY
 set debug to env.DEBUG_MODE
+```
+
+Flow automatically reads a `.env` file from the directory where you run the command. You can also set variables in your shell. Use `--strict-env` to fail if any referenced variables are missing.
+
+## Request data
+
+When you run `flow run` with `--input`, the JSON data becomes the `request` object. When served as a webhook via `flow serve`, the POST body becomes `request`. Access fields with dot notation:
+
+```txt
+set name to request.name
+set email to request.email
+set items to request.order.items
 ```
