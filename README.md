@@ -64,6 +64,25 @@ flow run my-workflow.flow --input '{"application": {"name": "Ada", "bvn": "12345
 flow serve my-workflow.flow --port 3000
 ```
 
+## CLI
+
+```bash
+flow check <file>                          # Parse and validate (no execution)
+flow run <file>                            # Execute a .flow file
+flow run <file> --input '<json>'           # Pass input data as JSON
+flow run <file> --input-file data.csv      # Load input from JSON, CSV, or Excel
+flow run <file> --verbose                  # Show detailed execution log
+flow run <file> --mock                     # Use mock services instead of real APIs
+flow run <file> --strict-env               # Error on missing environment variables
+flow run <file> --output-log run.json      # Write structured JSON execution log
+flow test <file>                           # Dry-run with mock services
+flow test <file> --verbose                 # Mock dry-run with execution log
+flow test <file> --output-log test.json    # Write structured JSON log
+flow serve <file-or-dir>                   # Start webhook server
+flow serve <file-or-dir> --port 4000       # Custom port (default: 3000)
+flow serve <file-or-dir> --mock            # Serve with mock connectors
+```
+
 ## The language
 
 Flow has exactly **7 constructs** and **5 data types**. That's the whole language.
@@ -178,7 +197,38 @@ services:
     Stripe is a plugin "stripe-payments"
 ```
 
-API keys go in a `.env` file. Flow loads it automatically.
+API keys go in a `.env` file. Flow loads it automatically. Use `--strict-env` to fail on missing variables.
+
+### Response metadata
+
+After a service call, you can capture the HTTP status code and response headers:
+
+```
+get user using GitHub at "/users/{username}"
+    save the result as user
+    save the status as status-code
+    save the response headers as resp-headers
+
+if status-code is 200:
+    log "Found user: {user.name}"
+    log "Rate limit remaining: {resp-headers.x-ratelimit-remaining}"
+```
+
+## Architecture
+
+```
+.flow file → Lexer → Parser → Analyzer → Runtime
+  (text)    (tokens)   (AST)  (validated)  (result)
+```
+
+TypeScript implementation. Each stage is independent and testable in isolation.
+
+- **Lexer** — Tokenizes source text with Python-style INDENT/DEDENT, string interpolation, and compound keyword matching
+- **Parser** — Recursive descent, produces a typed AST for all 7 constructs
+- **Analyzer** — Static checks before execution: service resolution, variable def-before-use, scope validation, duplicate detection
+- **Runtime** — Async tree-walking interpreter with real HTTP calls, AI SDK integration, retry with actual delays, and structured logging
+
+468 tests across all stages. No `any` types. Vitest.
 
 ## Error messages
 
