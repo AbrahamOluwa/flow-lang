@@ -65,6 +65,20 @@ Flow is intentionally focused. It does one thing well: automating workflows. You
 
 This is a feature, not a limitation. By keeping the language small and focused, every Flow program stays readable and understandable — even months after you wrote it.
 
+## What Flow can't do (yet)
+
+We'd rather be upfront about boundaries than let you find them the hard way.
+
+- **No parallel execution** — Steps run one at a time, top to bottom. You can't fire off three API calls simultaneously and wait for all of them. If you need that, you need a general-purpose language.
+- **No pause and resume** — A Flow workflow runs from start to finish in one go. There's no way to pause mid-workflow, wait for a human approval, and pick up where you left off. Long-running approval chains aren't a good fit today.
+- **No loops other than `for each`** — There are no `while` loops or infinite loops. Flow processes a list and moves on. This is intentional — it prevents runaway workflows — but it means you can't poll an endpoint until a condition changes.
+- **No imports or modules** — Each `.flow` file is self-contained. You can't share logic between files or build a library of reusable steps. If you find yourself copying the same block into multiple workflows, Flow doesn't have an answer for that yet.
+- **No database or state** — Flow doesn't store anything between runs. It connects to services, processes data, and returns a result. If you need to remember something across workflow executions, that state lives in your database or external service, not in Flow.
+- **No frontend, no UI** — Flow runs on the server (or your terminal). It doesn't render pages, handle user sessions, or replace your application code.
+- **No custom functions** — You can't define reusable functions or subroutines within Flow. What you see is what runs.
+
+Some of these are on the roadmap. Some are deliberate constraints that keep Flow simple. If your use case hits one of these walls, Flow might not be the right tool — and that's okay.
+
 ## How it works behind the scenes
 
 You don't need to understand this to use Flow, but if you're curious:
