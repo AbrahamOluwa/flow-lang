@@ -171,6 +171,65 @@ step CheckProduct:
         reject with "Product not found"
 ```
 
+### [Customer Database](/examples/customer-db)
+
+Queries a PostgreSQL database to look up a customer, aggregates their order history, and classifies them into a loyalty tier based on total spending.
+
+```txt
+services:
+    DB is a database at "postgresql://localhost:5432/customers"
+
+step GetOrderHistory:
+    list orders using DB at "orders" with customer_id customer-id
+        save the result as orders
+
+    set total-spent to 0
+    for each order in orders:
+        set total-spent to total-spent plus order.amount
+```
+
+### [Daily Sales Report](/examples/daily-sales-report)
+
+Aggregates daily sales from a database, calculates revenue metrics, evaluates performance against targets, and sends a summary to Slack. Designed to run on a schedule.
+
+```txt
+step CalculateMetrics:
+    if order-count is above 0:
+        set average-order to total-revenue divided by order-count
+
+step EvaluatePerformance:
+    if total-revenue is above 50000:
+        set performance to "exceptional"
+    otherwise if total-revenue is above 25000:
+        set performance to "strong"
+```
+
+```bash
+flow schedule examples/daily-sales-report.flow --every "day at 18:00" --mock
+```
+
+### [SLA Monitor](/examples/sla-monitor)
+
+Checks the health of critical services and alerts via PagerDuty when any are down. Designed to run every few minutes on a schedule.
+
+```txt
+step CheckPaymentAPI:
+    get health using PaymentAPI at "/health"
+        save the status as payment-status
+        on failure:
+            retry 2 times waiting 3 seconds
+            if still failing:
+                set payment-status to 0
+
+    if payment-status is not 200:
+        set failed-services to failed-services plus 1
+        log "ALERT: PaymentAPI is not responding"
+```
+
+```bash
+flow schedule examples/sla-monitor.flow --every "5 minutes" --mock --verbose
+```
+
 ## Running examples
 
 ### With mock services

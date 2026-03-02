@@ -1,0 +1,66 @@
+# Customer Database Lookup
+# Looks up a customer in a database, retrieves their order
+# history, and classifies them into a loyalty tier based
+# on their total spending.
+#
+# In the playground, this runs with mock database responses.
+# In production, connect to a real PostgreSQL or SQLite database.
+
+config:
+    name: "Customer Database Lookup"
+    version: 1
+
+services:
+    DB is a database at "postgresql://localhost:5432/customers"
+
+workflow:
+    trigger: when a customer lookup is requested
+
+    set email to request.customer_email
+    log "Looking up customer: {email}"
+
+    step FindCustomer:
+        get customer using DB at "customers" with email email
+            save the result as customer
+
+        if customer is empty:
+            reject with "No customer found with email: {email}"
+
+        set customer-id to customer.id
+        set name to customer.name
+        log "Found customer: {name} (ID: {customer-id})"
+
+    step GetOrderHistory:
+        list orders using DB at "orders" with customer_id customer-id
+            save the result as orders
+
+        log "Retrieved order history"
+
+    step ClassifyLoyalty:
+        set total-spent to request.total_spent
+        if total-spent is above 10000:
+            set tier to "platinum"
+            set discount to 20
+        otherwise if total-spent is above 5000:
+            set tier to "gold"
+            set discount to 15
+        otherwise if total-spent is above 1000:
+            set tier to "silver"
+            set discount to 10
+        otherwise:
+            set tier to "bronze"
+            set discount to 5
+
+        log "Loyalty tier: {tier} ({discount}% discount)"
+
+    step CheckRecentActivity:
+        count recent using DB at "orders" with customer_id customer-id
+            save the result as recent-count
+
+        if recent-count is 0:
+            set activity to "inactive"
+        otherwise:
+            set activity to "active"
+        log "Activity: {activity}"
+
+    complete with name name and email email and tier tier and discount discount and activity activity

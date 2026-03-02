@@ -376,3 +376,66 @@ workflow:
         expect(res.body.status).toBe("completed");
     });
 });
+
+// ============================================================
+// CORS
+// ============================================================
+
+describe("Server — CORS", () => {
+    const source = `
+workflow:
+    complete with status "ok"
+`;
+
+    it("does not include CORS headers when disabled", async () => {
+        const app = buildTestApp(source, { cors: undefined });
+        const res = await request(app).post("/").send({});
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    });
+
+    it("includes Access-Control-Allow-Origin: * when cors is true", async () => {
+        const app = buildTestApp(source, { cors: true });
+        const res = await request(app).post("/").send({});
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+
+    it("includes specific origin when cors is a string", async () => {
+        const app = buildTestApp(source, { cors: "https://example.com" });
+        const res = await request(app)
+            .post("/")
+            .set("Origin", "https://example.com")
+            .send({});
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBe("https://example.com");
+    });
+
+    it("OPTIONS preflight returns 204", async () => {
+        const app = buildTestApp(source, { cors: true });
+        const res = await request(app)
+            .options("/")
+            .set("Origin", "https://example.com")
+            .set("Access-Control-Request-Method", "POST");
+        expect(res.status).toBe(204);
+        expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+
+    it("preflight works without auth token", async () => {
+        const app = buildTestApp(source, { cors: true, authToken: "secret-123" });
+        const res = await request(app)
+            .options("/")
+            .set("Origin", "https://example.com")
+            .set("Access-Control-Request-Method", "POST");
+        // CORS preflight should succeed even with auth enabled
+        expect(res.status).toBe(204);
+        expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+
+    it("health check includes CORS headers when enabled", async () => {
+        const app = buildTestApp(source, { cors: true });
+        const res = await request(app).get("/health");
+        expect(res.status).toBe(200);
+        expect(res.headers["access-control-allow-origin"]).toBe("*");
+    });
+});

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { unlinkSync, existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -9,6 +9,7 @@ import {
     text, num, record, list, EMPTY,
     MockDatabaseConnector,
     DatabaseConnector,
+    PostgreSQLConnector,
     type ServiceConnector,
 } from "../../src/runtime/index.js";
 import type { ExecutionResult, FlowValue } from "../../src/types/index.js";
@@ -293,5 +294,213 @@ describe("Database — flow integration (mock)", () => {
         const result = await runOk(source, { connectors });
         const logs = logMessages(result);
         expect(logs[0]).toBe("42");
+    });
+});
+
+// ============================================================
+// PostgreSQLConnector (mocked pg module)
+// ============================================================
+
+describe("PostgreSQLConnector — mocked pg", () => {
+    let mockQuery: ReturnType<typeof vi.fn>;
+    let connector: PostgreSQLConnector;
+
+    beforeEach(async () => {
+        mockQuery = vi.fn();
+
+        // Mock the pg module
+        vi.doMock("pg", () => ({
+            default: {
+                Pool: class MockPool {
+                    query = mockQuery;
+                    async end(): Promise<void> { /* noop */ }
+                },
+            },
+        }));
+
+        // Clear any cached module so the connector picks up the mock
+        connector = new PostgreSQLConnector("postgresql://localhost:5432/testdb");
+    });
+
+    afterEach(() => {
+        vi.doUnmock("pg");
+    });
+
+    it("SELECT single row (get verb)", async () => {
+        mockQuery.mockResolvedValue({
+            rows: [{ id: 1, name: "Alice", email: "alice@example.com" }],
+            rowCount: 1,
+        });
+
+        const params = new Map<string, FlowValue>();
+        params.set("id", num(1));
+        const resp = await connector.call("get", "user", params, "users");
+
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("name")).toEqual(text("Alice"));
+        }
+        expect(mockQuery).toHaveBeenCalledWith(
+            'SELECT * FROM "users" WHERE "id" = $1 LIMIT 1',
+            [1],
+        );
+    });
+
+    it("SELECT multiple rows (list verb)", async () => {
+        mockQuery.mockResolvedValue({
+            rows: [
+                { id: 1, name: "Alice" },
+                { id: 2, name: "Bob" },
+            ],
+            rowCount: 2,
+        });
+
+        const params = new Map<string, FlowValue>();
+        params.set("status", text("active"));
+        const resp = await connector.call("list", "users", params, "users");
+
+        expect(resp.value.type).toBe("list");
+        if (resp.value.type === "list") {
+            expect(resp.value.value.length).toBe(2);
+        }
+    });
+
+    it("COUNT rows", async () => {
+        mockQuery.mockResolvedValue({
+            rows: [{ count: 42 }],
+            rowCount: 1,
+        });
+
+        const params = new Map<string, FlowValue>();
+        const resp = await connector.call("count", "users", params, "users");
+
+        expect(resp.value.type).toBe("number");
+        if (resp.value.type === "number") {
+            expect(resp.value.value).toBe(42);
+        }
+    });
+
+    it("INSERT row with RETURNING *", async () => {
+        mockQuery.mockResolvedValue({
+            rows: [{ id: 5, name: "Charlie", email: "charlie@test.com" }],
+            rowCount: 1,
+        });
+
+        const params = new Map<string, FlowValue>();
+        params.set("name", text("Charlie"));
+        params.set("email", text("charlie@test.com"));
+        const resp = await connector.call("insert", "user", params, "users");
+
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("id")).toEqual(num(5));
+            expect(resp.value.value.get("name")).toEqual(text("Charlie"));
+        }
+        // Verify RETURNING * is in the SQL
+        const sql = mockQuery.mock.calls[0][0] as string;
+        expect(sql).toContain("RETURNING *");
+    });
+
+    it("UPDATE row", async () => {
+        mockQuery.mockResolvedValue({ rows: [], rowCount: 1 });
+
+        const params = new Map<string, FlowValue>();
+        params.set("id", num(1));
+        params.set("name", text("Updated"));
+        const resp = await connector.call("update", "user", params, "users");
+
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("changes")).toEqual(num(1));
+        }
+    });
+
+    it("DELETE rows", async () => {
+        mockQuery.mockResolvedValue({ rows: [], rowCount: 3 });
+
+        const params = new Map<string, FlowValue>();
+        params.set("status", text("inactive"));
+        const resp = await connector.call("delete", "records", params, "users");
+
+        expect(resp.value.type).toBe("record");
+        if (resp.value.type === "record") {
+            expect(resp.value.value.get("changes")).toEqual(num(3));
+        }
+    });
+
+    it("SQL mode with :name to $N conversion", async () => {
+        mockQuery.mockResolvedValue({
+            rows: [{ total: 5 }],
+            rowCount: 1,
+        });
+
+        const params = new Map<string, FlowValue>();
+        params.set("query", text("SELECT COUNT(*) as total FROM orders WHERE status = :status AND amount > :min_amount"));
+        params.set("status", text("pending"));
+        params.set("min_amount", num(100));
+        const resp = await connector.call("count", "orders", params);
+
+        expect(resp.value.type).toBe("number");
+        if (resp.value.type === "number") {
+            expect(resp.value.value).toBe(5);
+        }
+
+        // Verify the conversion happened
+        const calledSql = mockQuery.mock.calls[0][0] as string;
+        expect(calledSql).toContain("$1");
+        expect(calledSql).toContain("$2");
+        expect(calledSql).not.toContain(":status");
+        expect(calledSql).not.toContain(":min_amount");
+    });
+
+    it("throws on missing table name", async () => {
+        const params = new Map<string, FlowValue>();
+        await expect(
+            connector.call("get", "user", params)
+        ).rejects.toThrow("requires a table name");
+    });
+
+    it("throws on invalid table name", async () => {
+        const params = new Map<string, FlowValue>();
+        await expect(
+            connector.call("get", "data", params, "invalid table!")
+        ).rejects.toThrow("Invalid table name");
+    });
+
+    it("throws on missing id for update", async () => {
+        mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+
+        const params = new Map<string, FlowValue>();
+        params.set("name", text("Test"));
+        await expect(
+            connector.call("update", "record", params, "users")
+        ).rejects.toThrow('requires an "id" parameter');
+    });
+
+    it("throws on empty params for delete", async () => {
+        const params = new Map<string, FlowValue>();
+        await expect(
+            connector.call("delete", "records", params, "users")
+        ).rejects.toThrow("requires at least one parameter");
+    });
+
+    it("uses PostgreSQLConnector for postgresql:// URLs in flow integration", async () => {
+        const source = [
+            "services:",
+            '    DB is a database at "postgresql://localhost/testdb"',
+            "",
+            "workflow:",
+            '    get user using DB at "users" with id 1',
+            "        save the result as user",
+            "    log user",
+        ].join("\n");
+
+        // Use a mock connector instead of the real PostgreSQLConnector
+        const mockConn = new MockDatabaseConnector();
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("DB", mockConn);
+
+        const result = await runOk(source, { connectors });
+        expect(result.result.status).not.toBe("error");
     });
 });

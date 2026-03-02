@@ -73,6 +73,9 @@ flow run my-workflow.flow --input '{"transaction": {"id": "txn-001", "amount": 8
 
 # Serve as a webhook endpoint
 flow serve my-workflow.flow --port 3000
+
+# Run on a schedule (every 5 minutes)
+flow schedule my-workflow.flow --every "5 minutes" --mock
 ```
 
 ## CLI
@@ -93,6 +96,12 @@ flow serve <file-or-dir>                   # Start webhook server
 flow serve <file-or-dir> --port 4000       # Custom port (default: 3000)
 flow serve <file-or-dir> --mock            # Serve with mock connectors
 flow serve <file-or-dir> --auth-token xyz  # Require Bearer token for requests
+flow serve <file-or-dir> --cors            # Enable CORS for all origins
+flow serve <file-or-dir> --cors-origin URL # Enable CORS for a specific origin
+flow schedule <file> --every "5 minutes"   # Run on a human-readable schedule
+flow schedule <file> --cron "*/5 * * * *"  # Run on a cron schedule
+flow schedule <file> --every "day at 9:00" # Run daily at a specific time
+flow schedule <file> --output-log ./logs/  # Write timestamped logs per run
 ```
 
 ## The language
@@ -205,14 +214,46 @@ services:
     # Webhooks
     Slack is a webhook at "https://hooks.slack.com/..."
 
-    # Databases (SQLite)
-    DB is a database at "./inventory.sqlite"
+    # SQLite databases
+    LocalDB is a database at "./inventory.sqlite"
+
+    # PostgreSQL databases
+    ProdDB is a database at "postgresql://user:pass@host:5432/mydb"
 
     # Plugins
     Stripe is a plugin "stripe-payments"
 ```
 
 API keys go in a `.env` file. Flow loads it automatically. Use `--strict-env` to fail on missing variables.
+
+### Databases
+
+Flow supports both SQLite (for local development and simple apps) and PostgreSQL (for production). The connector is selected automatically based on the connection string:
+
+```
+services:
+    # SQLite — file path or :memory:
+    LocalDB is a database at "./data.sqlite"
+
+    # PostgreSQL — connection string starting with postgresql:// or postgres://
+    ProdDB is a database at "postgresql://user:pass@localhost:5432/mydb"
+```
+
+Both use the same query syntax:
+
+```
+get customer using ProdDB at "customers" with email "ada@example.com"
+    save the result as customer
+
+list orders using ProdDB at "orders" with status "active"
+    save the result as orders
+
+insert record using ProdDB at "audit_log" with action "login" and user_id user-id
+    save the result as entry
+
+count rows using ProdDB at "orders" with status "pending"
+    save the result as pending-count
+```
 
 ### Response metadata
 
@@ -229,6 +270,29 @@ if status-code is 200:
     log "Rate limit remaining: {resp-headers.x-ratelimit-remaining}"
 ```
 
+## Scheduling
+
+Run any workflow on a recurring schedule without external tools like cron or Task Scheduler:
+
+```bash
+# Human-readable schedules
+flow schedule my-report.flow --every "5 minutes"
+flow schedule my-report.flow --every "2 hours"
+flow schedule my-report.flow --every "day at 9:00"
+flow schedule my-report.flow --every "monday at 9:00"
+
+# Or use cron expressions directly
+flow schedule my-report.flow --cron "0 */6 * * *"
+
+# With input data and logging
+flow schedule my-report.flow --every "day at 18:00" \
+  --input '{"region": "us-east"}' \
+  --output-log ./logs/ \
+  --verbose
+```
+
+Each execution writes a timestamped JSON log when `--output-log` points to a directory. Press Ctrl+C for a clean shutdown.
+
 ## Architecture
 
 ```
@@ -243,7 +307,7 @@ TypeScript implementation. Each stage is independent and testable in isolation.
 - **Analyzer** — Static checks before execution: service resolution, variable def-before-use, scope validation, duplicate detection
 - **Runtime** — Async tree-walking interpreter with real HTTP calls, AI SDK integration, retry with actual delays, and structured logging
 
-524 tests across all stages. No `any` types. Vitest.
+571 tests across all stages. No `any` types. Vitest.
 
 ## Error messages
 
@@ -288,13 +352,36 @@ The [`examples/`](examples/) directory has complete workflows:
 - **sendgrid-email.flow** — Transactional email with status verification
 - **inventory-lookup.flow** — SQLite database queries with stock checks
 - **loan-application.flow** — Full pipeline: credit, risk, fraud, approval
+- **customer-db.flow** — PostgreSQL customer lookup with loyalty tier classification
+- **daily-sales-report.flow** — Scheduled daily sales aggregation with Slack notification
+- **sla-monitor.flow** — Scheduled service health checks with PagerDuty alerting
 
 ## Documentation
 
 - [Landing page](https://abrahamoluwa.github.io/flow-lang/) — What Flow is and why it exists
 - [Getting Started](https://abrahamoluwa.github.io/flow-lang/guide/getting-started) — Two-track guide for engineers and ops teams
 - [Language Reference](https://abrahamoluwa.github.io/flow-lang/reference/language) — Complete syntax
+- [Services Guide](https://abrahamoluwa.github.io/flow-lang/guide/services) — APIs, databases, AI, webhooks
+- [Scheduling Guide](https://abrahamoluwa.github.io/flow-lang/guide/scheduling) — Run workflows on recurring schedules
 - [Playground](https://abrahamoluwa.github.io/flow-lang/playground/) — Try Flow in the browser, no install
+
+## CORS
+
+If browser-based clients need to call your Flow server, enable CORS:
+
+```bash
+# Allow all origins
+flow serve ./workflows/ --cors
+
+# Allow a specific origin
+flow serve ./workflows/ --cors-origin "https://my-app.example.com"
+
+# Or via environment variable
+export FLOW_CORS_ORIGIN=https://my-app.example.com
+flow serve ./workflows/
+```
+
+CORS preflight requests (OPTIONS) work even when authentication is enabled.
 
 ## Authentication
 
@@ -329,12 +416,13 @@ docker build -t flow-server .
 docker run -p 3000:3000 -v ./workflows:/workflows flow-server
 ```
 
-With authentication and environment variables:
+With authentication, CORS, and environment variables:
 
 ```bash
 docker run -p 3000:3000 \
   -v ./workflows:/workflows \
   -e FLOW_AUTH_TOKEN=my-secret-token \
+  -e FLOW_CORS_ORIGIN=https://my-app.example.com \
   -e API_KEY=your-api-key \
   flow-server
 ```
@@ -343,7 +431,7 @@ The default entrypoint runs `flow serve /workflows --port 3000`. Override with c
 
 ```bash
 docker run -p 4000:4000 -v ./my-flow.flow:/app/my-flow.flow \
-  flow-server serve /app/my-flow.flow --port 4000 --mock
+  flow-server serve /app/my-flow.flow --port 4000 --mock --cors
 ```
 
 ## Editor support
@@ -363,7 +451,7 @@ git clone https://github.com/AbrahamOluwa/flow-lang.git
 cd flow-lang
 npm install
 npm run build
-npm run test    # 524 tests across all pipeline stages
+npm run test    # 571 tests across all pipeline stages
 ```
 
 ## License

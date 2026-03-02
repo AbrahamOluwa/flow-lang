@@ -31,8 +31,11 @@
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 | 18. Database Connector | Complete | 20 | SQLite via better-sqlite3, table mode + SQL mode, verb mapping |
 | 19. Production Hardening | Complete | 5 | `--auth-token` middleware, Dockerfile, `.dockerignore` |
+| 20. CORS Config | Complete | 6 | `--cors`/`--cors-origin` flags, `cors` middleware on `flow serve` |
+| 21. PostgreSQL Connector | Complete | 12 | `pg` via dynamic import, `$N` params, `RETURNING *`, connection pooling |
+| 22. Scheduler | Complete | 29 | `flow schedule` command, `--cron`/`--every`, `node-cron`, graceful shutdown |
 
-**Tests passing: 524 (phases 1–19 + input-file + logging)**
+**Tests passing: 571 (phases 1–22 + input-file + logging)**
 
 ## Decisions Log
 
@@ -79,6 +82,9 @@ Decisions made during implementation that weren't in the original brief:
 39. **Hyphenated params to SQL bindings** — Flow identifiers like `product-id` are converted to `product_id` for SQLite bind param names (`:name` syntax doesn't support hyphens). Column names in generated SQL use the original form with double quotes.
 40. **`--auth-token` on `flow serve`** — Optional Bearer token auth middleware. Health check (`GET /health`) is always public. Token can also be set via `FLOW_AUTH_TOKEN` env var. When enabled, all workflow endpoints require `Authorization: Bearer <token>`.
 41. **Dockerfile uses multi-stage build** — Build stage compiles TypeScript, production stage copies only `dist/` and production `node_modules`. Entrypoint is `flow serve /workflows` — mount `.flow` files into `/workflows`. Native deps (better-sqlite3) require build tools installed in production stage.
+42. **CORS via `cors` npm package** — `--cors` enables all origins (`*`), `--cors-origin <url>` restricts to a specific origin. Env var fallback: `FLOW_CORS_ORIGIN`. CORS middleware is placed before auth middleware so OPTIONS preflight succeeds without a token.
+43. **PostgreSQL via connection string detection** — `buildConnectors()` checks if `decl.target` starts with `postgresql://` or `postgres://` to select `PostgreSQLConnector` vs `DatabaseConnector` (SQLite). No parser/analyzer changes needed. Uses `pg.Pool` for connection pooling, `$N` positional params (converted from `:name`), and `RETURNING *` for INSERT.
+44. **`flow schedule` with human-readable intervals** — `--every "5 minutes"` converts to cron via `parseEveryExpression()`. Supports minutes, hours, `hour`, `day`, `day at HH:MM`, weekday names (full and abbreviated), and `weekday at HH:MM`. `--cron` accepts raw cron expressions. `--output-log <dir>` writes timestamped JSON files per execution. Graceful shutdown on SIGINT/SIGTERM.
 
 ## What This Is
 
@@ -99,7 +105,8 @@ npm run lint         # Lint the codebase
 flow check <file>    # Parse and analyze a .flow file
 flow run <file>      # Execute a .flow file (--input <json>, --input-file <path>, --verbose, --strict-env, --mock, --output-log <path>)
 flow test <file>     # Dry-run with mock services (--dry-run, --verbose, --output-log <path>)
-flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock, --auth-token)
+flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock, --auth-token, --cors, --cors-origin)
+flow schedule <file> # Run a workflow on a recurring schedule (--cron, --every, --mock, --verbose, --input, --input-file, --output-log)
 ```
 
 ## Project Structure
@@ -111,6 +118,7 @@ src/
   analyzer/       # Semantic analysis: validates the AST
   runtime/        # Tree-walking interpreter + connectors
   server/         # Express webhook server (flow serve)
+  scheduler/      # Cron-based scheduler (flow schedule)
   cli/            # Commander.js CLI entry point
   types/          # Shared TypeScript types (tokens, AST nodes, errors)
   errors/         # Error formatting and suggestions
@@ -118,8 +126,9 @@ tests/
   lexer/          # 100 tests
   parser/         # 77 tests
   analyzer/       # 47 tests
-  runtime/        # 187 tests (includes 20 database connector tests)
-  server/         # 23 tests — webhook server + auth (supertest)
+  runtime/        # 199 tests (includes 32 database connector tests)
+  server/         # 29 tests — webhook server, auth, CORS (supertest)
+  scheduler/      # 29 tests — schedule parsing and validation
   errors/         # 14 tests
   integration/    # 53 tests — end-to-end .flow file tests
 examples/         # .flow files (email-verification, order-processing, loan-application, github-api, inventory-lookup)
@@ -139,7 +148,7 @@ interface ServiceConnector {
     call(verb: string, description: string, params: Map<string, FlowValue>, path?: string, headers?: Record<string, string>): Promise<ServiceResponse>;
 }
 ```
-All service interactions (API, AI, plugin, webhook, database) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector`, `MockDatabaseConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector`, `AnthropicConnector`, `OpenAIConnector`, `DatabaseConnector` (for real execution).
+All service interactions (API, AI, plugin, webhook, database) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector`, `MockDatabaseConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector`, `AnthropicConnector`, `OpenAIConnector`, `DatabaseConnector` (SQLite), `PostgreSQLConnector` (for real execution).
 
 ### RuntimeOptions (extension point for connectors)
 ```typescript

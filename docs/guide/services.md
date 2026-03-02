@@ -214,7 +214,11 @@ The `.env` file stays on your computer and should never be shared or uploaded to
 
 ## Databases
 
-Flow can query SQLite databases directly. Declare a database service with the path to a `.sqlite` file:
+Flow supports two database engines: **SQLite** for local development and simple apps, and **PostgreSQL** for production workloads. The connector is selected automatically based on the connection string.
+
+### SQLite
+
+Declare a SQLite database service with the path to a `.sqlite` file:
 
 ```txt
 services:
@@ -227,6 +231,34 @@ Use `:memory:` for an in-memory database (useful for testing):
 services:
     TestDB is a database at ":memory:"
 ```
+
+### PostgreSQL
+
+For production databases, use a PostgreSQL connection string. Flow detects URLs starting with `postgresql://` or `postgres://` and uses the PostgreSQL connector automatically:
+
+```txt
+services:
+    ProdDB is a database at "postgresql://user:password@localhost:5432/mydb"
+```
+
+The `pg` npm package is required for PostgreSQL. Install it with:
+
+```bash
+npm install pg
+```
+
+::: tip Same syntax, different engine
+The query syntax is identical for SQLite and PostgreSQL. Switch between them by changing only the connection string — no workflow changes needed.
+:::
+
+You can use environment variables for the connection string to keep credentials out of your `.flow` files:
+
+```txt
+services:
+    DB is a database at "postgresql://localhost:5432/mydb"
+```
+
+Then set the database URL in your `.env` file or environment.
 
 ### Querying data
 
@@ -299,8 +331,43 @@ if user is empty:
     reject with "User not found"
 ```
 
+### PostgreSQL example
+
+Here's a real-world workflow that queries a PostgreSQL database to look up a customer and classify them into a loyalty tier:
+
+```txt
+services:
+    DB is a database at "postgresql://localhost:5432/customers"
+
+workflow:
+    trigger: when a customer lookup is requested
+
+    get customer using DB at "customers" with email request.email
+        save the result as customer
+
+    if customer is empty:
+        reject with "Customer not found"
+
+    list orders using DB at "orders" with customer_id customer.id
+        save the result as orders
+
+    set total-spent to 0
+    for each order in orders:
+        set total-spent to total-spent plus order.amount
+
+    if total-spent is above 10000:
+        set tier to "platinum"
+    otherwise if total-spent is above 5000:
+        set tier to "gold"
+    otherwise:
+        set tier to "standard"
+
+    complete with name customer.name and tier tier and total-spent total-spent
+```
+
 ## Next steps
 
 - [AI Integration](/guide/ai-integration) — Use AI models as services
 - [Webhook Server](/guide/webhook-server) — Make your workflows available as web endpoints
+- [Scheduling](/guide/scheduling) — Run workflows on a recurring schedule
 - [Examples](/examples/) — See services used in real workflows

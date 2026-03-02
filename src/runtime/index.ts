@@ -523,7 +523,7 @@ export class PluginStubConnector implements ServiceConnector {
 
 const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-function flowValueToSqlite(value: FlowValue): string | number | null {
+function flowValueToSqlParam(value: FlowValue): string | number | null {
     switch (value.type) {
         case "text": return value.value;
         case "number": return value.value;
@@ -533,7 +533,7 @@ function flowValueToSqlite(value: FlowValue): string | number | null {
     }
 }
 
-function sqliteRowToFlowRecord(row: Record<string, unknown>): FlowRecord {
+function dbRowToFlowRecord(row: Record<string, unknown>): FlowRecord {
     const map = new Map<string, FlowValue>();
     for (const [k, v] of Object.entries(row)) {
         if (v === null || v === undefined) {
@@ -629,7 +629,7 @@ export class DatabaseConnector implements ServiceConnector {
             if (k === "query") continue;
             // Convert hyphens to underscores for SQLite bind param names
             const bindKey = k.replace(/-/g, "_");
-            bindings[bindKey] = flowValueToSqlite(v);
+            bindings[bindKey] = flowValueToSqlParam(v);
         }
 
         const stmt = db.prepare(sql);
@@ -641,7 +641,7 @@ export class DatabaseConnector implements ServiceConnector {
         if (isSelect) {
             if (DB_SELECT_SINGLE_VERBS.has(lower)) {
                 const row = stmt.get(bindings);
-                return { value: row ? sqliteRowToFlowRecord(row) : EMPTY };
+                return { value: row ? dbRowToFlowRecord(row) : EMPTY };
             }
             if (DB_COUNT_VERBS.has(lower)) {
                 const row = stmt.get(bindings);
@@ -652,7 +652,7 @@ export class DatabaseConnector implements ServiceConnector {
                 return { value: num(0) };
             }
             const rows = stmt.all(bindings);
-            return { value: list(rows.map(sqliteRowToFlowRecord)) };
+            return { value: list(rows.map(dbRowToFlowRecord)) };
         }
 
         const result = stmt.run(bindings);
@@ -697,7 +697,7 @@ export class DatabaseConnector implements ServiceConnector {
         for (const [k, v] of params) {
             const bindKey = k.replace(/-/g, "_");
             conditions.push(`"${k}" = :${bindKey}`);
-            bindings[bindKey] = flowValueToSqlite(v);
+            bindings[bindKey] = flowValueToSqlParam(v);
         }
         const sql = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
         return { sql, bindings };
@@ -707,14 +707,14 @@ export class DatabaseConnector implements ServiceConnector {
         const where = this.buildWhereClause(params);
         const stmt = db.prepare(`SELECT * FROM "${table}"${where.sql} LIMIT 1`);
         const row = stmt.get(where.bindings);
-        return { value: row ? sqliteRowToFlowRecord(row) : EMPTY };
+        return { value: row ? dbRowToFlowRecord(row) : EMPTY };
     }
 
     private selectMulti(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
         const where = this.buildWhereClause(params);
         const stmt = db.prepare(`SELECT * FROM "${table}"${where.sql}`);
         const rows = stmt.all(where.bindings);
-        return { value: list(rows.map(sqliteRowToFlowRecord)) };
+        return { value: list(rows.map(dbRowToFlowRecord)) };
     }
 
     private countRows(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
@@ -732,7 +732,7 @@ export class DatabaseConnector implements ServiceConnector {
             const bindKey = k.replace(/-/g, "_");
             columns.push(`"${k}"`);
             placeholders.push(`:${bindKey}`);
-            bindings[bindKey] = flowValueToSqlite(v);
+            bindings[bindKey] = flowValueToSqlParam(v);
         }
         const sql = `INSERT INTO "${table}" (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`;
         const result = db.prepare(sql).run(bindings);
@@ -746,9 +746,9 @@ export class DatabaseConnector implements ServiceConnector {
 
         for (const [k, v] of params) {
             const bindKey = k.replace(/-/g, "_");
-            bindings[bindKey] = flowValueToSqlite(v);
+            bindings[bindKey] = flowValueToSqlParam(v);
             if (k === "id") {
-                idValue = flowValueToSqlite(v);
+                idValue = flowValueToSqlParam(v);
             } else {
                 setClauses.push(`"${k}" = :${bindKey}`);
             }
@@ -780,6 +780,264 @@ export class DatabaseConnector implements ServiceConnector {
         const sql = `DELETE FROM "${table}"${where.sql}`;
         const result = db.prepare(sql).run(where.bindings);
         return { value: record({ changes: num(result.changes) }) };
+    }
+}
+
+// ============================================================
+// PostgreSQL Connector
+// ============================================================
+
+interface PgPool {
+    query(text: string, values?: unknown[]): Promise<PgQueryResult>;
+    end(): Promise<void>;
+}
+
+interface PgQueryResult {
+    rows: Record<string, unknown>[];
+    rowCount: number | null;
+}
+
+export class PostgreSQLConnector implements ServiceConnector {
+    private connectionString: string;
+    private pool: PgPool | null = null;
+
+    constructor(connectionString: string) {
+        this.connectionString = connectionString;
+    }
+
+    private async ensurePool(): Promise<PgPool> {
+        if (this.pool) return this.pool;
+
+        let PgPool: new (config: { connectionString: string }) => PgPool;
+        try {
+            const mod = await import("pg");
+            PgPool = mod.default.Pool as unknown as new (config: { connectionString: string }) => PgPool;
+        } catch {
+            throw new Error(
+                'The "pg" package is required for PostgreSQL database services. ' +
+                "Install it with: npm install pg"
+            );
+        }
+
+        this.pool = new PgPool({ connectionString: this.connectionString });
+        return this.pool;
+    }
+
+    async call(verb: string, _description: string, params: Map<string, FlowValue>, path?: string): Promise<ServiceResponse> {
+        const pool = await this.ensurePool();
+        const lower = verb.toLowerCase();
+
+        // SQL mode: raw query via `with query "..."` param
+        const queryParam = params.get("query");
+        if (queryParam && queryParam.type === "text") {
+            return this.executeSqlMode(pool, lower, queryParam.value, params);
+        }
+
+        // Table mode: path is the table name
+        if (!path) {
+            throw new Error(
+                `Database call "${verb}" requires a table name. ` +
+                `Use: ${verb} ... using <DB> at "tablename" with ...`
+            );
+        }
+
+        const tableName = path.replace(/^\//, "");
+        if (!VALID_TABLE_NAME.test(tableName)) {
+            throw new Error(
+                `Invalid table name "${tableName}". ` +
+                "Table names must start with a letter or underscore and contain only letters, digits, and underscores."
+            );
+        }
+
+        return this.executeTableMode(pool, lower, tableName, params);
+    }
+
+    private convertNamedParams(sql: string, params: Map<string, FlowValue>): { text: string; values: unknown[] } {
+        const values: unknown[] = [];
+        const paramKeys = new Map<string, number>();
+        let idx = 0;
+
+        // Collect all params except "query"
+        for (const [k, v] of params) {
+            if (k === "query") continue;
+            const bindKey = k.replace(/-/g, "_");
+            idx++;
+            paramKeys.set(bindKey, idx);
+            values.push(flowValueToSqlParam(v));
+        }
+
+        // Replace :name placeholders with $N
+        const converted = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_match, name: string) => {
+            const position = paramKeys.get(name);
+            if (position === undefined) {
+                throw new Error(`SQL parameter ":${name}" has no matching value in the params.`);
+            }
+            return `$${position}`;
+        });
+
+        return { text: converted, values };
+    }
+
+    private async executeSqlMode(
+        pool: PgPool,
+        lower: string,
+        sql: string,
+        params: Map<string, FlowValue>,
+    ): Promise<ServiceResponse> {
+        const { text: queryText, values } = this.convertNamedParams(sql, params);
+
+        const isSelect = DB_SELECT_SINGLE_VERBS.has(lower) ||
+            DB_SELECT_MULTI_VERBS.has(lower) ||
+            DB_COUNT_VERBS.has(lower) ||
+            sql.trimStart().toUpperCase().startsWith("SELECT");
+
+        const result = await pool.query(queryText, values);
+
+        if (isSelect) {
+            if (DB_SELECT_SINGLE_VERBS.has(lower)) {
+                const row = result.rows[0];
+                return { value: row ? dbRowToFlowRecord(row) : EMPTY };
+            }
+            if (DB_COUNT_VERBS.has(lower)) {
+                const row = result.rows[0];
+                if (row) {
+                    const firstVal = Object.values(row)[0];
+                    return { value: num(Number(firstVal)) };
+                }
+                return { value: num(0) };
+            }
+            return { value: list(result.rows.map(dbRowToFlowRecord)) };
+        }
+
+        if (DB_INSERT_VERBS.has(lower) && result.rows.length > 0) {
+            return { value: dbRowToFlowRecord(result.rows[0]!) };
+        }
+        return { value: record({ changes: num(result.rowCount ?? 0) }) };
+    }
+
+    private async executeTableMode(
+        pool: PgPool,
+        lower: string,
+        tableName: string,
+        params: Map<string, FlowValue>,
+    ): Promise<ServiceResponse> {
+        if (DB_SELECT_SINGLE_VERBS.has(lower)) {
+            return this.selectSingle(pool, tableName, params);
+        }
+        if (DB_SELECT_MULTI_VERBS.has(lower)) {
+            return this.selectMulti(pool, tableName, params);
+        }
+        if (DB_COUNT_VERBS.has(lower)) {
+            return this.countRows(pool, tableName, params);
+        }
+        if (DB_INSERT_VERBS.has(lower)) {
+            return this.insertRow(pool, tableName, params);
+        }
+        if (DB_UPDATE_VERBS.has(lower)) {
+            return this.updateRow(pool, tableName, params);
+        }
+        if (DB_DELETE_VERBS.has(lower)) {
+            return this.deleteRows(pool, tableName, params);
+        }
+
+        // Unknown verb — default to select
+        return this.selectMulti(pool, tableName, params);
+    }
+
+    private buildWhereClause(params: Map<string, FlowValue>): { sql: string; values: unknown[]; nextIdx: number } {
+        const conditions: string[] = [];
+        const values: unknown[] = [];
+        let idx = 0;
+        for (const [k, v] of params) {
+            idx++;
+            conditions.push(`"${k}" = $${idx}`);
+            values.push(flowValueToSqlParam(v));
+        }
+        const sql = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
+        return { sql, values, nextIdx: idx };
+    }
+
+    private async selectSingle(pool: PgPool, table: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        const where = this.buildWhereClause(params);
+        const result = await pool.query(`SELECT * FROM "${table}"${where.sql} LIMIT 1`, where.values);
+        const row = result.rows[0];
+        return { value: row ? dbRowToFlowRecord(row) : EMPTY };
+    }
+
+    private async selectMulti(pool: PgPool, table: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        const where = this.buildWhereClause(params);
+        const result = await pool.query(`SELECT * FROM "${table}"${where.sql}`, where.values);
+        return { value: list(result.rows.map(dbRowToFlowRecord)) };
+    }
+
+    private async countRows(pool: PgPool, table: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        const where = this.buildWhereClause(params);
+        const result = await pool.query(`SELECT COUNT(*) as count FROM "${table}"${where.sql}`, where.values);
+        const row = result.rows[0] as Record<string, unknown> | undefined;
+        return { value: num(Number(row?.["count"] ?? 0)) };
+    }
+
+    private async insertRow(pool: PgPool, table: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        const columns: string[] = [];
+        const placeholders: string[] = [];
+        const values: unknown[] = [];
+        let idx = 0;
+        for (const [k, v] of params) {
+            idx++;
+            columns.push(`"${k}"`);
+            placeholders.push(`$${idx}`);
+            values.push(flowValueToSqlParam(v));
+        }
+        const sql = `INSERT INTO "${table}" (${columns.join(", ")}) VALUES (${placeholders.join(", ")}) RETURNING *`;
+        const result = await pool.query(sql, values);
+        const row = result.rows[0];
+        return { value: row ? dbRowToFlowRecord(row) : record({ id: num(0) }) };
+    }
+
+    private async updateRow(pool: PgPool, table: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        const setClauses: string[] = [];
+        const values: unknown[] = [];
+        let idValue: unknown = null;
+        let idx = 0;
+
+        for (const [k, v] of params) {
+            idx++;
+            values.push(flowValueToSqlParam(v));
+            if (k === "id") {
+                idValue = flowValueToSqlParam(v);
+            } else {
+                setClauses.push(`"${k}" = $${idx}`);
+            }
+        }
+
+        if (idValue === null) {
+            throw new Error(
+                'UPDATE requires an "id" parameter for the WHERE clause. ' +
+                "For updates with a different primary key, use SQL mode with the query parameter."
+            );
+        }
+        if (setClauses.length === 0) {
+            throw new Error("UPDATE requires at least one field to set besides id.");
+        }
+
+        // Find the index of the id param
+        const idIdx = Array.from(params.keys()).indexOf("id") + 1;
+        const sql = `UPDATE "${table}" SET ${setClauses.join(", ")} WHERE "id" = $${idIdx}`;
+        const result = await pool.query(sql, values);
+        return { value: record({ changes: num(result.rowCount ?? 0) }) };
+    }
+
+    private async deleteRows(pool: PgPool, table: string, params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        const where = this.buildWhereClause(params);
+        if (where.sql === "") {
+            throw new Error(
+                "DELETE requires at least one parameter for the WHERE clause. " +
+                "To delete all rows, use SQL mode with the query parameter."
+            );
+        }
+        const sql = `DELETE FROM "${table}"${where.sql}`;
+        const result = await pool.query(sql, where.values);
+        return { value: record({ changes: num(result.rowCount ?? 0) }) };
     }
 }
 
@@ -921,7 +1179,11 @@ export function buildConnectors(
                 }
                 break;
             case "database":
-                connectors.set(decl.name, new DatabaseConnector(decl.target));
+                if (decl.target.startsWith("postgresql://") || decl.target.startsWith("postgres://")) {
+                    connectors.set(decl.name, new PostgreSQLConnector(decl.target));
+                } else {
+                    connectors.set(decl.name, new DatabaseConnector(decl.target));
+                }
                 break;
         }
     }

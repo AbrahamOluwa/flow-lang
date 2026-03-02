@@ -1,5 +1,6 @@
 import express from "express";
 import type { Request, Response } from "express";
+import cors from "cors";
 import { readFileSync, readdirSync, statSync } from "fs";
 import { resolve, basename } from "path";
 import { config as loadDotenv } from "dotenv";
@@ -30,6 +31,7 @@ export interface ServeOptions {
     verbose: boolean;
     mock: boolean;
     authToken?: string;
+    cors?: boolean | string;
 }
 
 // ============================================================
@@ -167,6 +169,12 @@ export function createApp(
     const app = express();
     app.use(express.json());
 
+    // CORS middleware
+    if (options.cors) {
+        const origin = typeof options.cors === "string" ? options.cors : "*";
+        app.use(cors({ origin }));
+    }
+
     // Health check (always public, before auth)
     app.get("/health", (_req: Request, res: Response) => {
         res.json({ status: "ok" });
@@ -269,6 +277,10 @@ export function startServer(target: string, options: ServeOptions): void {
         for (const [route, wf] of workflows) {
             const path = route === "" ? "/" : `/${route}`;
             console.log(`  ${chalk.cyan(path)} -> ${wf.name}`);
+        }
+        if (options.cors) {
+            const origin = typeof options.cors === "string" ? options.cors : "*";
+            console.log(chalk.cyan(`CORS enabled — allowed origin: ${origin}`));
         }
         if (options.authToken) {
             console.log(chalk.yellow(`\nAuth enabled — requests require: Authorization: Bearer <token>`));

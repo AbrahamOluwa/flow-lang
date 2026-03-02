@@ -9,6 +9,9 @@ import weatherCode from "../weather-alert.flow?raw";
 import cryptoCode from "../crypto-portfolio.flow?raw";
 import typoCode from "../typo.flow?raw";
 import inventoryCode from "../inventory-lookup.flow?raw";
+import customerDbCode from "../customer-db.flow?raw";
+import dailySalesCode from "../daily-sales-report.flow?raw";
+import slaMonitorCode from "../sla-monitor.flow?raw";
 
 export interface Example {
     name: string;
@@ -77,6 +80,24 @@ export const EXAMPLES: Example[] = [
         description: "Database queries, stock checks, empty handling",
         code: inventoryCode,
         input: '{ "request": { "product-id": 1 } }',
+    },
+    {
+        name: "Customer Database (PostgreSQL)",
+        description: "Database lookup, order history, loyalty tier classification",
+        code: customerDbCode,
+        input: '{ "customer_email": "ada@example.com", "total_spent": 7500 }',
+    },
+    {
+        name: "Daily Sales Report",
+        description: "Scheduled report with revenue metrics and Slack notification",
+        code: dailySalesCode,
+        input: '{ "total_revenue": 34500, "order_count": 47, "highest_sale": 2800 }',
+    },
+    {
+        name: "SLA Monitor",
+        description: "Scheduled health checks with PagerDuty alerting",
+        code: slaMonitorCode,
+        input: "{}",
     },
     {
         name: "Error Demo",

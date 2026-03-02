@@ -11,6 +11,7 @@ import {
     execute, toDisplay, flowValueToJson, buildConnectors,
 } from "../runtime/index.js";
 import { startServer } from "../server/index.js";
+import { startSchedule } from "../scheduler/index.js";
 import { formatErrors } from "../errors/index.js";
 import { parseInputFile } from "./input-file.js";
 import type { FlowError, LogEntry, StructuredLog, SerializedLogEntry } from "../types/index.js";
@@ -397,13 +398,36 @@ program
     .option("--verbose", "Log each request")
     .option("--mock", "Use mock services instead of real connectors")
     .option("--auth-token <token>", "Require Bearer token for all requests (health check excluded)")
-    .action((target: string, options: { port: string; verbose?: boolean; mock?: boolean; authToken?: string }) => {
+    .option("--cors", "Enable CORS for all origins")
+    .option("--cors-origin <origin>", "Enable CORS for a specific origin")
+    .action((target: string, options: { port: string; verbose?: boolean; mock?: boolean; authToken?: string; cors?: boolean; corsOrigin?: string }) => {
+        let corsOption: boolean | string | undefined;
+        if (options.corsOrigin) {
+            corsOption = options.corsOrigin;
+        } else if (options.cors) {
+            corsOption = true;
+        } else if (process.env.FLOW_CORS_ORIGIN) {
+            corsOption = process.env.FLOW_CORS_ORIGIN;
+        }
         startServer(target, {
             port: parseInt(options.port, 10),
             verbose: options.verbose ?? false,
             mock: options.mock ?? false,
             authToken: options.authToken ?? process.env.FLOW_AUTH_TOKEN,
+            cors: corsOption,
         });
     });
+
+program
+    .command("schedule <file>")
+    .description("Run a .flow file on a recurring schedule")
+    .option("--cron <expression>", "Cron expression (e.g. \"*/5 * * * *\")")
+    .option("--every <description>", "Human-readable schedule (e.g. \"5 minutes\", \"day at 9:00\")")
+    .option("--input <json>", "JSON string with input data for the workflow")
+    .option("--input-file <path>", "Read input from a file (.json, .csv, .xlsx, .xls)")
+    .option("--verbose", "Show detailed execution log")
+    .option("--mock", "Use mock services instead of real connectors")
+    .option("--output-log <dir>", "Write timestamped JSON log files to a directory")
+    .action(startSchedule);
 
 program.parse();

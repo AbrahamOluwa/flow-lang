@@ -37,6 +37,8 @@ Each file automatically gets its own address based on its filename:
 | `--verbose` | Shows details about each incoming request | `--verbose` |
 | `--mock` | Uses simulated services instead of real ones | `--mock` |
 | `--auth-token` | Requires a Bearer token for all requests | `--auth-token my-secret` |
+| `--cors` | Allows any website to call your server | `--cors` |
+| `--cors-origin` | Allows a specific website to call your server | `--cors-origin "https://my-app.com"` |
 
 ```bash
 flow serve my-workflow.flow --port 4000 --verbose --mock
@@ -218,6 +220,45 @@ docker run -p 3000:3000 \
   flow-server serve /app/my-workflow.flow --port 3000 --mock
 ```
 
+## CORS (Cross-Origin Requests)
+
+If a web application running in a browser needs to call your Flow server, you'll need to enable CORS (Cross-Origin Resource Sharing). Without it, browsers will block the request for security reasons.
+
+### Allow all origins
+
+The simplest option — any website can call your server:
+
+```bash
+flow serve my-workflow.flow --cors
+```
+
+This is fine for development and internal tools. For public-facing servers, use a specific origin instead.
+
+### Allow a specific origin
+
+Restrict access to a single website:
+
+```bash
+flow serve my-workflow.flow --cors-origin "https://my-app.example.com"
+```
+
+Only requests from `https://my-app.example.com` will be accepted. All others will be blocked by the browser.
+
+### Environment variable
+
+You can also set the allowed origin via an environment variable:
+
+```bash
+export FLOW_CORS_ORIGIN=https://my-app.example.com
+flow serve my-workflow.flow
+```
+
+This is useful for Docker deployments and CI environments where you don't want to hard-code the origin in the command.
+
+::: tip CORS and authentication work together
+If you enable both CORS and authentication (`--auth-token`), browser preflight requests (OPTIONS) will succeed without a token. Only the actual workflow requests (POST) need the token.
+:::
+
 ## Testing mode
 
 Use `--mock` during development to test your webhook setup without calling real services:
@@ -289,6 +330,7 @@ Response:
 
 ## Next steps
 
+- [Scheduling](/guide/scheduling) — Run workflows on a recurring schedule
 - [CLI Commands](/reference/cli) — All available commands and options
 - [Services](/guide/services) — Connect to external services
 - [Examples](/examples/) — More workflow examples

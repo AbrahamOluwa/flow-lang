@@ -1,6 +1,6 @@
 # CLI Commands
 
-Flow provides four commands for working with your workflows.
+Flow provides five commands for working with your workflows.
 
 ## flow check
 
@@ -194,6 +194,8 @@ flow serve <target> [options]
 | `--verbose` | Log each incoming request |
 | `--mock` | Use mock services instead of real connectors |
 | `--auth-token <token>` | Require Bearer token for all requests (health check excluded) |
+| `--cors` | Enable CORS for all origins (`*`) |
+| `--cors-origin <origin>` | Enable CORS for a specific origin |
 
 ### Examples
 
@@ -212,7 +214,15 @@ flow serve my-workflow.flow --mock
 
 # Require authentication
 flow serve ./workflows/ --auth-token my-secret-token
+
+# Enable CORS for browser clients
+flow serve ./workflows/ --cors
+
+# Enable CORS for a specific origin
+flow serve ./workflows/ --cors-origin "https://my-app.example.com"
 ```
+
+CORS can also be configured via the `FLOW_CORS_ORIGIN` environment variable.
 
 ### Routes
 
@@ -247,6 +257,62 @@ curl -X POST http://localhost:3000 -H "Content-Type: application/json" -d "{\"us
 :::
 
 The JSON body becomes the `request` object in the workflow.
+
+## flow schedule
+
+Run a workflow on a recurring schedule.
+
+```bash
+flow schedule <file> [options]
+```
+
+You must provide either `--every` or `--cron` to specify the schedule.
+
+### Options
+
+| Option | Description |
+|---|---|
+| `--every <description>` | Human-readable schedule (e.g. `"5 minutes"`, `"day at 9:00"`) |
+| `--cron <expression>` | Standard cron expression (e.g. `"*/5 * * * *"`) |
+| `--input <json>` | JSON string to use as the `request` object |
+| `--input-file <path>` | Read input from a file (.json, .csv, .xlsx, .xls) |
+| `--verbose` | Show detailed execution logs for each run |
+| `--mock` | Use mock services instead of real connectors |
+| `--output-log <dir>` | Write a timestamped JSON log file for each execution |
+
+### Schedule formats
+
+The `--every` option accepts these human-readable formats:
+
+| Format | Cron equivalent | Description |
+|---|---|---|
+| `"5 minutes"` | `*/5 * * * *` | Every 5 minutes |
+| `"2 hours"` | `0 */2 * * *` | Every 2 hours |
+| `"hour"` | `0 * * * *` | Every hour on the hour |
+| `"day"` | `0 0 * * *` | Daily at midnight |
+| `"day at 9:00"` | `0 9 * * *` | Daily at 9:00 AM |
+| `"monday at 9:00"` | `0 9 * * 1` | Every Monday at 9:00 AM |
+| `"friday"` | `0 0 * * 5` | Every Friday at midnight |
+
+Day names can be full or abbreviated (mon, tue, wed, thu, fri, sat, sun). Case-insensitive.
+
+### Examples
+
+```bash
+# Run every 5 minutes with mock services
+flow schedule my-workflow.flow --every "5 minutes" --mock --verbose
+
+# Run daily at 9 AM with input data
+flow schedule my-report.flow --every "day at 9:00" --input '{"region": "us-east"}'
+
+# Run with cron and write logs to a directory
+flow schedule my-monitor.flow --cron "*/10 * * * *" --output-log ./logs/
+
+# Weekly report every Monday at 9 AM
+flow schedule my-report.flow --every "monday at 9:00" --verbose
+```
+
+Press Ctrl+C to stop the scheduler cleanly.
 
 ## Environment variables
 

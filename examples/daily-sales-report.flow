@@ -1,0 +1,79 @@
+# Daily Sales Report
+# Aggregates the day's sales from a database, calculates totals and
+# averages, then sends a summary to Slack. Designed to run on a
+# schedule (e.g. every day at 18:00).
+#
+# Usage (one-time run):
+#   flow run examples/daily-sales-report.flow --mock --verbose
+#
+# Usage (scheduled, every day at 6pm):
+#   flow schedule examples/daily-sales-report.flow --every "day at 18:00" --mock --verbose
+#
+# Usage (scheduled with cron):
+#   flow schedule examples/daily-sales-report.flow --cron "0 18 * * *" --mock
+#
+# Required env vars (for real execution):
+#   DATABASE_URL       -- PostgreSQL connection string
+#   SLACK_WEBHOOK_URL  -- Slack incoming webhook URL
+
+config:
+    name: "Daily Sales Report"
+    version: 1
+
+services:
+    DB is a database at "postgresql://localhost:5432/sales"
+    Slack is a webhook at "https://hooks.slack.com/services/placeholder"
+
+workflow:
+    trigger: when the end-of-day report runs
+
+    log "Generating daily sales report"
+
+    step FetchSales:
+        list sales using DB at "sales" with status "completed"
+            save the result as sales
+
+        set total-revenue to 0
+        set order-count to 0
+        set highest-sale to 0
+
+        for each sale in sales:
+            set total-revenue to total-revenue plus sale.amount
+            set order-count to order-count plus 1
+            if sale.amount is above highest-sale:
+                set highest-sale to sale.amount
+
+        log "Found {order-count} completed sales"
+
+    step CalculateMetrics:
+        if order-count is above 0:
+            set average-order to total-revenue divided by order-count
+            set average-order to average-order times 1 rounded to 2
+        otherwise:
+            set average-order to 0
+
+        log "Revenue: {total-revenue}, Average: {average-order}, Highest: {highest-sale}"
+
+    step EvaluatePerformance:
+        if total-revenue is above 50000:
+            set performance to "exceptional"
+            set summary to "Outstanding day! Revenue exceeded 50k target."
+        otherwise if total-revenue is above 25000:
+            set performance to "strong"
+            set summary to "Good day. Revenue above 25k baseline."
+        otherwise if total-revenue is above 10000:
+            set performance to "average"
+            set summary to "Standard day. Revenue meets minimum threshold."
+        otherwise:
+            set performance to "below target"
+            set summary to "Below target. Review may be needed."
+
+    step NotifyTeam:
+        set message to "Daily Sales Report: {order-count} orders, {total-revenue} revenue ({performance}). {summary}"
+        send alert using Slack with text message
+            on failure:
+                retry 2 times waiting 10 seconds
+                if still failing:
+                    log "Could not reach Slack"
+
+    complete with total-revenue total-revenue and order-count order-count and average-order average-order and highest-sale highest-sale and performance performance

@@ -1,0 +1,95 @@
+# SLA Monitor
+# Checks the health of critical services and alerts when any are down
+# or responding slowly. Designed to run on a recurring schedule
+# (e.g. every 5 minutes) to catch outages early.
+#
+# Usage (one-time run):
+#   flow run examples/sla-monitor.flow --mock --verbose
+#
+# Usage (scheduled, every 5 minutes):
+#   flow schedule examples/sla-monitor.flow --every "5 minutes" --mock --verbose
+#
+# Usage (with output logs):
+#   flow schedule examples/sla-monitor.flow --every "5 minutes" --mock --output-log ./logs/sla/
+
+config:
+    name: "SLA Monitor"
+    version: 1
+
+services:
+    PaymentAPI is an API at "https://api.payments.example.com"
+    InventoryAPI is an API at "https://inventory.example.com/api"
+    NotificationAPI is an API at "https://notify.example.com/api"
+    PagerDuty is a webhook at "https://events.pagerduty.com/v2/enqueue"
+
+workflow:
+    trigger: when a health check cycle runs
+
+    set failed-services to 0
+    set checked-services to 0
+    set status-summary to ""
+
+    step CheckPaymentAPI:
+        get health using PaymentAPI at "/health"
+            save the result as payment-health
+            save the status as payment-status
+            on failure:
+                retry 2 times waiting 3 seconds
+                if still failing:
+                    set payment-status to 0
+
+        set checked-services to checked-services plus 1
+        if payment-status is not 200:
+            set failed-services to failed-services plus 1
+            set status-summary to status-summary plus "PaymentAPI: DOWN. "
+            log "ALERT: PaymentAPI is not responding"
+        otherwise:
+            log "PaymentAPI: healthy"
+
+    step CheckInventoryAPI:
+        get health using InventoryAPI at "/health"
+            save the result as inventory-health
+            save the status as inventory-status
+            on failure:
+                retry 2 times waiting 3 seconds
+                if still failing:
+                    set inventory-status to 0
+
+        set checked-services to checked-services plus 1
+        if inventory-status is not 200:
+            set failed-services to failed-services plus 1
+            set status-summary to status-summary plus "InventoryAPI: DOWN. "
+            log "ALERT: InventoryAPI is not responding"
+        otherwise:
+            log "InventoryAPI: healthy"
+
+    step CheckNotificationAPI:
+        get health using NotificationAPI at "/health"
+            save the result as notification-health
+            save the status as notification-status
+            on failure:
+                retry 2 times waiting 3 seconds
+                if still failing:
+                    set notification-status to 0
+
+        set checked-services to checked-services plus 1
+        if notification-status is not 200:
+            set failed-services to failed-services plus 1
+            set status-summary to status-summary plus "NotificationAPI: DOWN. "
+            log "ALERT: NotificationAPI is not responding"
+        otherwise:
+            log "NotificationAPI: healthy"
+
+    step AlertIfNeeded:
+        if failed-services is above 0:
+            set alert-message to "{failed-services} of {checked-services} services are down. {status-summary}"
+            log "Sending PagerDuty alert: {alert-message}"
+            send alert using PagerDuty with summary alert-message and severity "critical"
+                on failure:
+                    retry 3 times waiting 5 seconds
+                    if still failing:
+                        log "CRITICAL: Could not reach PagerDuty"
+        otherwise:
+            log "All {checked-services} services are healthy"
+
+    complete with checked checked-services and failed failed-services and status status-summary

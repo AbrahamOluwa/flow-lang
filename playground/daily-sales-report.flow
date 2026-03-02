@@ -1,0 +1,59 @@
+# Daily Sales Report
+# Aggregates sales data, calculates revenue metrics,
+# evaluates performance against targets, and sends
+# a summary notification to Slack.
+#
+# In production, run this on a schedule:
+#   flow schedule daily-sales-report.flow --every "day at 18:00"
+#
+# In the playground, this runs with mock services.
+
+config:
+    name: "Daily Sales Report"
+    version: 1
+
+services:
+    DB is a database at "postgresql://localhost:5432/sales"
+    Slack is a webhook at "https://hooks.slack.com/services/placeholder"
+
+workflow:
+    trigger: when the end-of-day report runs
+
+    log "Generating daily sales report"
+
+    step FetchSales:
+        set total-revenue to request.total_revenue
+        set order-count to request.order_count
+        set highest-sale to request.highest_sale
+        log "Processing {order-count} sales"
+
+    step CalculateMetrics:
+        if order-count is above 0:
+            set average-order to total-revenue divided by order-count
+        otherwise:
+            set average-order to 0
+
+        log "Revenue: {total-revenue}, Average order: {average-order}"
+
+    step EvaluatePerformance:
+        if total-revenue is above 50000:
+            set performance to "exceptional"
+            set summary to "Outstanding day! Revenue exceeded 50k target."
+        otherwise if total-revenue is above 25000:
+            set performance to "strong"
+            set summary to "Good day. Revenue above 25k baseline."
+        otherwise if total-revenue is above 10000:
+            set performance to "average"
+            set summary to "Standard day. Revenue meets minimum threshold."
+        otherwise:
+            set performance to "below target"
+            set summary to "Below target. Review may be needed."
+
+        log "Performance: {performance}"
+
+    step NotifyTeam:
+        set message to "Daily Sales Report: {order-count} orders, {total-revenue} revenue ({performance}). {summary}"
+        send alert using Slack with text message
+        log "Notification sent: {message}"
+
+    complete with total-revenue total-revenue and order-count order-count and average-order average-order and performance performance and summary summary
