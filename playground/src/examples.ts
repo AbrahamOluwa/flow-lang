@@ -1,3 +1,4 @@
+import fraudCode from "../transaction-fraud.flow?raw";
 import helloCode from "../hello.flow?raw";
 import discountCode from "../discount.flow?raw";
 import healthCode from "../health-check.flow?raw";
@@ -14,6 +15,12 @@ export interface Example {
 }
 
 export const EXAMPLES: Example[] = [
+    {
+        name: "Transaction Fraud Detection",
+        description: "AI risk scoring, rule-based screening, human escalation",
+        code: fraudCode,
+        input: '{ "transaction": { "id": "txn-8291", "amount": 8500, "merchant": "ElectroMart", "card_present": false, "customer_id": "cust-4420" } }',
+    },
     {
         name: "GitHub User Lookup",
         description: "GitHub API, conditionals on response data",

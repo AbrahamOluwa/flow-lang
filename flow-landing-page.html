@@ -1031,7 +1031,7 @@
       <div class="frag-card fade-in">
         <div class="frag-icon">🤖</div>
         <h3>The AI agent</h3>
-        <p>An AI model assesses loan risk, but the confidence threshold and fallback behavior are configured inside the codebase. No one outside engineering knows the rules.</p>
+        <p>An AI model scores fraud risk, but the confidence thresholds and escalation rules are buried in the codebase. No one outside engineering knows when transactions get blocked.</p>
       </div>
     </div>
   </div>
@@ -1050,22 +1050,24 @@
   <div class="code-showcase">
     <!-- BEFORE -->
     <div>
-      <div class="comparison-label before">❌ BEFORE — Logic scattered everywhere</div>
+      <div class="comparison-label before">❌ BEFORE — Fraud rules scattered everywhere</div>
       <div class="code-panel" style="border-radius: 0 0 12px 12px;">
         <pre>
 <span class="cm"># The Notion doc says:</span>
-<span class="str">"Check credit score. If below 300, reject."</span>
+<span class="str">"Block transactions over $5,000. Flag anything
+ the AI scores above 70%."</span>
 
 <span class="cm"># The Python code says:</span>
-<span class="kw">if</span> resp.json()[<span class="str">"data"</span>][<span class="str">"score"</span>] < <span class="num">350</span>:
-    <span class="cm"># was 300, changed in hotfix #4127</span>
-    <span class="fn">raise</span> Exception(<span class="str">"rejected"</span>)
+<span class="kw">if</span> txn[<span class="str">"amount"</span>] > <span class="num">10000</span>:  <span class="cm"># was 5000</span>
+    <span class="fn">raise</span> FraudBlock(<span class="str">"high_value"</span>)
+<span class="kw">if</span> ai_score > <span class="num">0.75</span>:  <span class="cm"># changed in PR #891</span>
+    flag_for_review(txn)
 
 <span class="cm"># The Slack thread says:</span>
-<span class="str">"Actually we changed it to 350 last month
- but forgot to update the doc"</span>
+<span class="str">"We raised the threshold to 10k last month
+ after too many false positives"</span>
 
-<span class="cm"># Nobody knows which is correct.</span></pre>
+<span class="cm"># Nobody knows which rules are live.</span></pre>
       </div>
     </div>
 
@@ -1075,18 +1077,19 @@
       <div class="code-panel" style="border-radius: 0 0 12px 12px;">
         <pre>
 <span class="kw">services:</span>
-    CreditBureau <span class="kw">is an API at</span> <span class="str">"https://api.bureau.com"</span>
-        <span class="kw">with headers:</span>
-            Authorization: <span class="str">"Bearer {env.BUREAU_KEY}"</span>
+    RiskScorer <span class="kw">is an AI using</span> <span class="str">"anthropic/claude-sonnet"</span>
+    FraudOps <span class="kw">is a webhook at</span> <span class="str">"https://hooks.slack.com/..."</span>
 
-<span class="kw">step</span> Check Credit:
-    fetch report <span class="kw">using</span> <span class="svc">CreditBureau</span>
-        <span class="kw">with</span> bvn application.bvn
-        <span class="kw">save the result as</span> credit
-        <span class="kw">save the status as</span> status-code
+<span class="kw">step</span> Decision:
+    <span class="kw">ask</span> <span class="svc">RiskScorer</span> <span class="kw">to</span> analyze this transaction
+        <span class="kw">save the result as</span> assessment
+        <span class="kw">save the confidence as</span> ai-confidence
 
-    <span class="kw">if</span> credit.score <span class="kw">is below</span> <span class="num">350</span>:
-        <span class="kw">reject with</span> <span class="str">"Credit score too low"</span>
+    <span class="kw">if</span> combined-score <span class="kw">is above</span> <span class="num">75</span>:
+        <span class="kw">set</span> decision <span class="kw">to</span> <span class="str">"block"</span>
+    <span class="kw">otherwise if</span> combined-score <span class="kw">is above</span> <span class="num">40</span>:
+        <span class="kw">set</span> decision <span class="kw">to</span> <span class="str">"review"</span>
+        notify fraud team <span class="kw">using</span> <span class="svc">FraudOps</span>
 
 <span class="cm"># This file IS the rule.</span>
 <span class="cm"># It runs. It's versioned. It's reviewable.</span></pre>
@@ -1269,25 +1272,23 @@
       <div class="diff-panel before fade-in">
         <div class="diff-panel-header">Before — Pull Request #47</div>
         <div class="diff-panel-body">
-          <div>step Check Credit:</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;fetch credit report using CreditBureau</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with bvn application.bvn</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;save the result as credit_report</div>
+          <div>step RuleBasedScreening:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to 0</div>
           <div>&nbsp;</div>
-          <div class="line-old">&nbsp;&nbsp;&nbsp;&nbsp;if credit_report.score is below 300:</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;reject with "Credit score below minimum"</div>
+          <div class="line-old">&nbsp;&nbsp;&nbsp;&nbsp;if amount is above 5000:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to rule-score plus 40</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;log "High-value flag: {amount}"</div>
         </div>
       </div>
       <div class="diff-panel after fade-in">
-        <div class="diff-panel-header">After — Approved by @ops-lead</div>
+        <div class="diff-panel-header">After — Approved by @fraud-ops-lead</div>
         <div class="diff-panel-body">
-          <div>step Check Credit:</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;fetch credit report using CreditBureau</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with bvn application.bvn</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;save the result as credit_report</div>
+          <div>step RuleBasedScreening:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to 0</div>
           <div>&nbsp;</div>
-          <div class="line-new">&nbsp;&nbsp;&nbsp;&nbsp;if credit_report.score is below 350:</div>
-          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;reject with "Credit score below minimum"</div>
+          <div class="line-new">&nbsp;&nbsp;&nbsp;&nbsp;if amount is above 10000:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to rule-score plus 40</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;log "High-value flag: {amount}"</div>
         </div>
       </div>
     </div>
@@ -1354,15 +1355,22 @@
         <div class="dot" style="background:#22C55E"></div>
       </div>
       <div class="terminal-body">
-        <div class="prompt-line"><span class="info">$</span> <span class="cmd">flow run loan-review.flow --input '{"application": ...}'</span></div>
+        <div class="prompt-line"><span class="info">$</span> <span class="cmd">flow run transaction-fraud.flow --input '{"transaction": ...}'</span></div>
         <br>
-        <div class="output"><span class="info">▶ Running:</span> Loan Application Review v2.1</div>
-        <div class="output">&nbsp;&nbsp;├─ Check Credit .............. <span class="success">done</span> <span style="color:var(--text-muted)">(420ms)</span></div>
-        <div class="output">&nbsp;&nbsp;├─ Assess Risk .............. <span class="success">done</span> <span style="color:var(--text-muted)">(1.2s)</span></div>
-        <div class="output">&nbsp;&nbsp;│&nbsp;&nbsp; └─ AI confidence: <span class="info">87%</span> <span style="color:var(--text-muted)">(above threshold)</span></div>
-        <div class="output">&nbsp;&nbsp;└─ Decide ................... <span class="success">done</span> <span style="color:var(--text-muted)">(89ms)</span></div>
+        <div class="output"><span class="info">▶ Running:</span> Transaction Fraud Detection v1</div>
+        <div class="output">&nbsp;&nbsp;├─ ValidateTransaction ....... <span class="success">done</span> <span style="color:var(--text-muted)">(12ms)</span></div>
+        <div class="output">&nbsp;&nbsp;├─ VelocityScreen ........... <span class="success">done</span> <span style="color:var(--text-muted)">(380ms)</span></div>
+        <div class="output">&nbsp;&nbsp;├─ RuleBasedScreening ....... <span class="success">done</span> <span style="color:var(--text-muted)">(4ms)</span></div>
+        <div class="output">&nbsp;&nbsp;│&nbsp;&nbsp; └─ Rule score: <span class="step-label">40</span></div>
+        <div class="output">&nbsp;&nbsp;├─ AIRiskAssessment ......... <span class="success">done</span> <span style="color:var(--text-muted)">(1.1s)</span></div>
+        <div class="output">&nbsp;&nbsp;│&nbsp;&nbsp; └─ AI confidence: <span class="info">82%</span></div>
+        <div class="output">&nbsp;&nbsp;├─ DecisionEngine ........... <span class="success">done</span> <span style="color:var(--text-muted)">(3ms)</span></div>
+        <div class="output">&nbsp;&nbsp;│&nbsp;&nbsp; └─ Combined score: <span class="step-label">61</span> → <span class="step-label">review</span></div>
+        <div class="output">&nbsp;&nbsp;├─ Escalation ............... <span class="success">done</span> <span style="color:var(--text-muted)">(210ms)</span></div>
+        <div class="output">&nbsp;&nbsp;│&nbsp;&nbsp; └─ Fraud ops notified</div>
+        <div class="output">&nbsp;&nbsp;└─ RecordAudit .............. <span class="success">done</span> <span style="color:var(--text-muted)">(95ms)</span></div>
         <br>
-        <div class="output"><span class="success">✓ Complete:</span> status = "approved"</div>
+        <div class="output"><span class="success">✓ Complete:</span> decision = "review", score = 61</div>
         <div class="output" style="color:var(--text-muted)">&nbsp;&nbsp;Log exported → ./logs/exec-2026-03-02.json</div>
       </div>
     </div>

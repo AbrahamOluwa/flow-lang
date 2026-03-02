@@ -1,0 +1,60 @@
+# Transaction Fraud Detection
+# AI-assisted risk scoring with rule-based screening and escalation.
+
+config:
+    name: "Transaction Fraud Detection"
+    version: 1
+
+services:
+    VelocityCheck is an API at "https://velocity.example.com/api"
+    RiskScorer is an AI using "anthropic/claude-sonnet-4-20250514"
+    FraudOps is a webhook at "https://hooks.slack.com/services/fraud-ops"
+
+workflow:
+    trigger: when a transaction is submitted
+
+    set transaction-id to transaction.id
+    set amount to transaction.amount
+    set merchant to transaction.merchant
+    set card-present to transaction.card_present
+    log "Fraud check started: {transaction-id}, amount: {amount}"
+
+    step RuleScreening:
+        set rule-score to 0
+
+        if amount is above 10000:
+            set rule-score to rule-score plus 40
+            log "High-value flag: {amount}"
+        otherwise if amount is above 5000:
+            set rule-score to rule-score plus 20
+
+        if card-present is false:
+            if amount is above 2000:
+                set rule-score to rule-score plus 20
+                log "Card-not-present flag"
+
+        log "Rule score: {rule-score}"
+
+    step AIRiskScoring:
+        ask RiskScorer to analyze this transaction for fraud patterns
+            save the result as ai-assessment
+            save the confidence as ai-confidence
+        log "AI confidence: {ai-confidence}"
+
+    step Decision:
+        set ai-score to ai-confidence times 100 rounded to 0
+        set combined-score to rule-score plus ai-score divided by 2 rounded to 0
+        log "Combined risk score: {combined-score}"
+
+        if combined-score is above 75:
+            set decision to "block"
+            log "BLOCKED: score {combined-score}"
+        otherwise if combined-score is above 40:
+            set decision to "review"
+            log "FLAGGED: score {combined-score}"
+            notify fraud team using FraudOps with transaction transaction-id and amount amount and score combined-score
+        otherwise:
+            set decision to "approve"
+            log "APPROVED: score {combined-score}"
+
+    complete with decision decision and transaction transaction-id and score combined-score

@@ -6,25 +6,36 @@ Flow is a language for writing business logic as plain text that executes. A `.f
 
 ```
 services:
-    CreditBureau is an API at "https://credit.example.com/api"
-    SendGrid is an API at "https://api.sendgrid.com/v3"
+    VelocityCheck is an API at "https://velocity.example.com/api"
         with headers:
-            Authorization: "Bearer {env.SENDGRID_API_KEY}"
+            Authorization: "Bearer {env.VELOCITY_API_KEY}"
+    RiskScorer is an AI using "anthropic/claude-sonnet-4-20250514"
+    FraudOps is a webhook at "https://hooks.slack.com/services/fraud-ops"
 
 workflow:
-    trigger: when a loan application is submitted
+    trigger: when a transaction is submitted for authorization
 
-    step Check Credit:
-        fetch credit report using CreditBureau with bvn application.bvn
-            save the result as report
+    step RuleScreening:
+        if amount is above 10000:
+            set rule-score to rule-score plus 40
+        if card-present is false:
+            set rule-score to rule-score plus 20
 
-        if report.score is below 350:
-            send rejection using SendGrid to application.email
-            reject with "Credit score too low"
+    step AIRiskScoring:
+        ask RiskScorer to analyze this transaction for fraud patterns
+            save the result as assessment
+            save the confidence as ai-confidence
 
-    step Approve:
-        log "Approved: {application.name}, score {report.score}"
-        complete with status "approved" and applicant application.name
+    step Decision:
+        if combined-score is above 75:
+            set decision to "block"
+        otherwise if combined-score is above 40:
+            set decision to "review"
+            notify fraud team using FraudOps with transaction transaction-id and score combined-score
+        otherwise:
+            set decision to "approve"
+
+    complete with decision decision and score combined-score
 ```
 
 This file **is** the rule. It runs. It's versioned. Anyone on the team can read it.
@@ -33,7 +44,7 @@ This file **is** the rule. It runs. It's versioned. Anyone on the team can read 
 
 In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either.
 
-Every change goes through engineering. "Change the threshold from 300 to 350" becomes a Jira ticket, a sprint, and a deploy — for a one-line change.
+Every change goes through engineering. "Raise the fraud threshold from 5000 to 10000" becomes a Jira ticket, a sprint, and a deploy — for a one-line change.
 
 Flow eliminates this gap:
 - **Operations teams** write and maintain `.flow` files. When a rule changes, they change the file and submit a PR.
@@ -58,7 +69,7 @@ flow check my-workflow.flow
 flow test my-workflow.flow --dry-run --verbose
 
 # Run for real
-flow run my-workflow.flow --input '{"application": {"name": "Ada", "bvn": "12345"}}'
+flow run my-workflow.flow --input '{"transaction": {"id": "txn-001", "amount": 8500}}'
 
 # Serve as a webhook endpoint
 flow serve my-workflow.flow --port 3000
@@ -262,6 +273,7 @@ Some of these are on the roadmap. Some are deliberate constraints.
 
 The [`examples/`](examples/) directory has complete workflows:
 
+- **transaction-fraud.flow** — Real-time fraud detection with AI risk scoring and human escalation
 - **email-verification.flow** — Email validation with conditionals
 - **order-processing.flow** — Inventory, payment, AI confirmation
 - **github-scout.flow** — GitHub API with popularity scoring

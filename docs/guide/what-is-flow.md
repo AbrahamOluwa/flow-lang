@@ -6,7 +6,7 @@ Flow is a language for writing business rules that execute. A `.flow` file is si
 
 ## The problem Flow solves
 
-In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either. And now AI is making decisions too, with its logic buried in code nobody outside engineering can read. When a regulator asks "prove how this decision is made," nobody can point to one place.
+In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either. And now AI is making decisions too — scoring fraud risk, flagging transactions — with its logic buried in code nobody outside engineering can read. When a regulator asks "prove how this decision is made," nobody can point to one place.
 
 Flow eliminates this gap. A `.flow` file **is** the rule. If it's in the file, it runs. If it's not, it doesn't. There's nothing to get out of sync.
 
@@ -22,42 +22,53 @@ The person who understands the process owns the process.
 
 ## What does Flow look like?
 
-Here's a real Flow program that reviews a loan application:
+Here's a real Flow program that detects transaction fraud with AI-assisted risk scoring:
 
 ```txt
 config:
-    name: "Loan Review"
+    name: "Transaction Fraud Detection"
     version: 1
 
 services:
-    CreditBureau is an API at "https://credit.example.com/api"
-    SendGrid is an API at "https://api.sendgrid.com/v3"
+    VelocityCheck is an API at "https://velocity.example.com/api"
         with headers:
-            Authorization: "Bearer {env.SENDGRID_API_KEY}"
+            Authorization: "Bearer {env.VELOCITY_API_KEY}"
+    RiskScorer is an AI using "anthropic/claude-sonnet-4-20250514"
+    FraudOps is a webhook at "https://hooks.slack.com/services/fraud-ops"
 
 workflow:
-    trigger: when a loan application is submitted
+    trigger: when a transaction is submitted for authorization
 
-    step Check Credit:
-        fetch credit report using CreditBureau with bvn application.bvn
-            save the result as credit_report
+    step RuleScreening:
+        if amount is above 10000:
+            set rule-score to rule-score plus 40
+        if card-present is false:
+            set rule-score to rule-score plus 20
 
-        if credit_report.score is below 350:
-            send rejection using SendGrid to application.email
-            reject with "Credit score too low"
+    step AIRiskScoring:
+        ask RiskScorer to analyze this transaction for fraud patterns
+            save the result as assessment
+            save the confidence as ai-confidence
 
-    step Approve:
-        log "Approved: {application.name}, score {credit_report.score}"
-        complete with status "approved" and applicant application.name
+    step Decision:
+        if combined-score is above 75:
+            set decision to "block"
+        otherwise if combined-score is above 40:
+            set decision to "review"
+            notify fraud team using FraudOps with transaction transaction-id and score combined-score
+        otherwise:
+            set decision to "approve"
+
+    complete with decision decision and score combined-score
 ```
 
-This file is the rule. It runs. It's versioned. Anyone on the team can read it and know exactly what happens when a loan application comes in.
+This file is the rule. It runs. It's versioned. Anyone on the team can read it and know exactly what happens when a transaction is submitted.
 
 ## What Flow gives you
 
 - **One source of truth** — The process document and the executable logic are the same artifact. No drift.
 - **Readable by anyone** — Structured English syntax. Operations teams write it. Compliance teams audit it. Engineers review it in pull requests. It reads like a process document because it is one.
-- **Versionable** — Lives in Git. Clean diffs. "Changed credit threshold from 300 to 350" — one line, reviewed, merged.
+- **Versionable** — Lives in Git. Clean diffs. "Raised fraud threshold from 5000 to 10000" — one line, reviewed, merged.
 - **Auditable** — Every execution is logged with full context. Hand the file and the log to an auditor.
 - **Connects to anything** — REST APIs, webhooks, AI models. Stripe, SendGrid, Slack, GitHub, your internal services.
 - **AI, governed** — AI is a named participant with explicit instructions, confidence thresholds, and fallback rules — all visible in the file. Not a black box.
