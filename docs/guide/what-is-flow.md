@@ -6,7 +6,7 @@ Flow is a language for writing business rules that execute. A `.flow` file is si
 
 ## The problem Flow solves
 
-In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either. The real rules live in someone's head — and when that person leaves, the rules leave with them.
+In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either. And now AI is making decisions too, with its logic buried in code nobody outside engineering can read. When a regulator asks "prove how this decision is made," nobody can point to one place.
 
 Flow eliminates this gap. A `.flow` file **is** the rule. If it's in the file, it runs. If it's not, it doesn't. There's nothing to get out of sync.
 
@@ -56,10 +56,12 @@ This file is the rule. It runs. It's versioned. Anyone on the team can read it a
 ## What Flow gives you
 
 - **One source of truth** — The process document and the executable logic are the same artifact. No drift.
-- **Readable by anyone** — Structured English syntax. No semicolons, no brackets, no `function()` or `class`. Non-engineers can read, write, and review workflows.
+- **Readable by anyone** — Structured English syntax. Operations teams write it. Compliance teams audit it. Engineers review it in pull requests. It reads like a process document because it is one.
 - **Versionable** — Lives in Git. Clean diffs. "Changed credit threshold from 300 to 350" — one line, reviewed, merged.
 - **Auditable** — Every execution is logged with full context. Hand the file and the log to an auditor.
 - **Connects to anything** — REST APIs, webhooks, AI models. Stripe, SendGrid, Slack, GitHub, your internal services.
+- **AI, governed** — AI is a named participant with explicit instructions, confidence thresholds, and fallback rules — all visible in the file. Not a black box.
+- **Secure by design** — Seven constructs. No imports, no shell commands, no filesystem access. A `.flow` file can only do what it explicitly declares.
 - **Catches mistakes early** — Flow checks your file for errors before anything runs and tells you exactly what's wrong in plain English.
 
 ## What Flow can't do (yet)
@@ -89,4 +91,4 @@ The key part is stage 2: Flow catches your mistakes **before** running, so you n
 
 ## Next steps
 
-Ready to try it? Head to [Getting Started](/guide/getting-started) to install Flow and run your first workflow.
+Ready to try it? Head to [Getting Started](/guide/getting-started) to install Flow and run your first business rule.

@@ -469,7 +469,7 @@
 
   .pillars-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
   }
 
@@ -502,6 +502,8 @@
   .pillar:nth-child(2) .pillar-icon { background: var(--green-dim); }
   .pillar:nth-child(3) .pillar-icon { background: var(--amber-dim); }
   .pillar:nth-child(4) .pillar-icon { background: var(--purple-dim); }
+  .pillar:nth-child(5) .pillar-icon { background: var(--red-dim); }
+  .pillar:nth-child(6) .pillar-icon { background: rgba(244, 114, 182, 0.12); }
 
   .pillar h3 {
     font-size: 1rem;
@@ -578,6 +580,192 @@
     font-size: 0.92rem;
     color: var(--text-muted);
     line-height: 1.7;
+  }
+
+  /* ===== COMPARISON TABLE ===== */
+  .comp-section {
+    padding: 120px 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .comp-section h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  .comp-section > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin-bottom: 48px;
+    line-height: 1.8;
+  }
+
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .comp-table th {
+    text-align: left;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+
+  .comp-table th:first-child { border-radius: 8px 0 0 0; }
+  .comp-table th:last-child { border-radius: 0 8px 0 0; }
+
+  .comp-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .comp-table td:first-child {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .comp-table .yes { color: var(--green); font-weight: 500; }
+  .comp-table .no { color: var(--text-muted); opacity: 0.5; }
+  .comp-table .partial { color: var(--amber); }
+  .comp-table .flow-col { background: rgba(34, 211, 238, 0.04); }
+
+  /* ===== DIFF / CHANGE MANAGEMENT ===== */
+  .diff-section {
+    padding: 120px 40px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .diff-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .diff-inner h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  .diff-inner > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin-bottom: 48px;
+    line-height: 1.8;
+  }
+
+  .diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .diff-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .diff-panel-header {
+    padding: 14px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .diff-panel.before .diff-panel-header { color: var(--red); background: var(--red-dim); }
+  .diff-panel.after .diff-panel-header { color: var(--green); background: var(--green-dim); }
+
+  .diff-panel-body {
+    padding: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.9;
+    color: var(--text-secondary);
+  }
+
+  .diff-panel-body .line-old { color: var(--red); opacity: 0.7; }
+  .diff-panel-body .line-new { color: var(--green); }
+
+  /* ===== INDUSTRIES ===== */
+  .industries-section {
+    padding: 120px 40px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .industries-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .industries-inner h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+
+  .industries-inner > p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 620px;
+    margin-bottom: 48px;
+    line-height: 1.8;
+  }
+
+  .industry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+  }
+
+  .industry-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+
+  .industry-card:hover {
+    border-color: var(--accent-dim);
+    transform: translateY(-2px);
+  }
+
+  .industry-card .ind-icon { font-size: 1.8rem; margin-bottom: 14px; }
+
+  .industry-card h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .industry-card p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.6;
   }
 
   /* ===== TERMINAL DEMO ===== */
@@ -751,18 +939,24 @@
     .pillars-grid { grid-template-columns: repeat(2, 1fr); }
     .teams-grid { grid-template-columns: 1fr; }
     .fragmentation-grid { grid-template-columns: repeat(2, 1fr); }
+    .diff-grid { grid-template-columns: 1fr; }
+    .comp-table { font-size: 0.78rem; }
+    .comp-table th, .comp-table td { padding: 10px 8px; }
+    .industry-grid { grid-template-columns: repeat(2, 1fr); }
     nav { padding: 16px 20px; }
     .nav-links { gap: 16px; }
     .nav-links a:not(.nav-cta) { display: none; }
     .hero { padding: 120px 20px 60px; }
     .problem-section, .solution-section, .what-section,
-    .teams-section, .demo-section, .cta-section { padding: 80px 20px; }
+    .teams-section, .demo-section, .cta-section,
+    .comp-section, .diff-section, .industries-section { padding: 80px 20px; }
     footer { flex-direction: column; gap: 20px; text-align: center; }
   }
 
   @media (max-width: 600px) {
     .pillars-grid { grid-template-columns: 1fr; }
     .fragmentation-grid { grid-template-columns: 1fr; }
+    .industry-grid { grid-template-columns: 1fr; }
     .hero-actions { flex-direction: column; align-items: flex-start; }
   }
 </style>
@@ -815,7 +1009,7 @@
     <div class="section-label fade-in">The problem</div>
     <h2 class="fade-in">Business logic lives in too many places</h2>
     <p class="lead fade-in">
-      Documents say one thing. Code does another. The real rules live in someone's head. When that person leaves, the rules leave with them.
+      Documents say one thing. Code does another. The real rules live in someone's head. And now AI is making decisions too, with its logic buried in code nobody outside engineering can read.
     </p>
 
     <div class="fragmentation-grid">
@@ -835,9 +1029,9 @@
         <p>The ops lead clarified an edge case in a thread last quarter. It never made it into the doc or the code. It lives in Slack search.</p>
       </div>
       <div class="frag-card fade-in">
-        <div class="frag-icon">🧠</div>
-        <h3>The person</h3>
-        <p>One senior analyst just knows how it really works. They've been here since the beginning. Nobody has written it down.</p>
+        <div class="frag-icon">🤖</div>
+        <h3>The AI agent</h3>
+        <p>An AI model assesses loan risk, but the confidence threshold and fallback behavior are configured inside the codebase. No one outside engineering knows the rules.</p>
       </div>
     </div>
   </div>
@@ -904,32 +1098,42 @@
 <!-- ===== WHAT FLOW IS ===== -->
 <section class="what-section">
   <div class="what-inner">
-    <div class="section-label fade-in">What a .flow file is</div>
-    <h2 class="fade-in">Four things. One file.</h2>
+    <div class="section-label fade-in">What Flow gives you</div>
+    <h2 class="fade-in">Prove how your decisions work</h2>
     <p class="fade-in">
-      Today these are four different systems. Flow makes them one artifact.
+      Six properties, each earned by design — not bolted on after the fact.
     </p>
 
     <div class="pillars-grid">
       <div class="pillar fade-in">
         <div class="pillar-icon">📖</div>
-        <h3>Process document</h3>
-        <p>Anyone on the team can read and understand the business logic. No code literacy required.</p>
+        <h3>Readable by anyone</h3>
+        <p>A compliance officer, an ops lead, or a regulator can read a .flow file and understand exactly what the system does. No engineering degree required.</p>
       </div>
       <div class="pillar fade-in">
         <div class="pillar-icon">⚡</div>
-        <h3>Executable program</h3>
-        <p>Calls APIs, invokes AI agents, makes decisions, sends notifications. Runs identically every time.</p>
-      </div>
-      <div class="pillar fade-in">
-        <div class="pillar-icon">🔀</div>
-        <h3>Versioned artifact</h3>
-        <p>Lives in Git. Clean, reviewable diffs. "Changed threshold from 300 to 350" — one line, reviewed, merged.</p>
+        <h3>Executable as written</h3>
+        <p>The same file that documents the process runs in production. The specification is the implementation. They can't drift apart.</p>
       </div>
       <div class="pillar fade-in">
         <div class="pillar-icon">🔍</div>
-        <h3>Audit trail</h3>
-        <p>Every execution logged with full context. Hand the file to an auditor. They can read it.</p>
+        <h3>Auditable by default</h3>
+        <p>Every execution produces a structured log. Every change lives in Git with full attribution. You don't prepare for audits — you're always ready.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-icon">🤖</div>
+        <h3>AI, governed</h3>
+        <p>AI is a named participant with explicit instructions, confidence thresholds, and fallback rules — all visible in the file. Not a black box.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-icon">🔒</div>
+        <h3>Secure by design</h3>
+        <p>Seven constructs. No imports, no shell commands, no filesystem access. A .flow file can only do what it explicitly declares. The blast radius is contained.</p>
+      </div>
+      <div class="pillar fade-in">
+        <div class="pillar-icon">📁</div>
+        <h3>You own the file</h3>
+        <p>Plain text in your Git repo. No platform dependency. No vendor lock-in. No subscription required to read your own business logic.</p>
       </div>
     </div>
   </div>
@@ -962,6 +1166,178 @@
   </div>
 </section>
 
+<!-- ===== COMPARISON TABLE ===== -->
+<section class="comp-section">
+  <div class="section-label fade-in" style="color: var(--amber);">How Flow compares</div>
+  <h2 class="fade-in">Not another automation tool</h2>
+  <p class="fade-in">
+    Flow doesn't compete with Zapier for simple automations or with Python for general programming. Flow governs the decisions that matter.
+  </p>
+
+  <div style="overflow-x: auto;" class="fade-in">
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>Capability</th>
+          <th class="flow-col">Flow</th>
+          <th>AI Agent Platforms</th>
+          <th>Zapier / n8n</th>
+          <th>Python</th>
+          <th>Documents</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Non-engineer can read it</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="partial">Varies</td>
+          <td class="partial">Partially</td>
+          <td class="no">No</td>
+          <td class="yes">Yes</td>
+        </tr>
+        <tr>
+          <td>Actually executes</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="yes">Yes</td>
+          <td class="yes">Yes</td>
+          <td class="yes">Yes</td>
+          <td class="no">No</td>
+        </tr>
+        <tr>
+          <td>Deterministic logic</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="no">No</td>
+          <td class="yes">Yes</td>
+          <td class="yes">Yes</td>
+          <td style="color: var(--text-muted); opacity: 0.5;">N/A</td>
+        </tr>
+        <tr>
+          <td>Meaningful diffs in Git</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="no">No</td>
+          <td class="no">No</td>
+          <td class="yes">Yes</td>
+          <td class="no">No</td>
+        </tr>
+        <tr>
+          <td>AI as governed participant</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="partial">Partial</td>
+          <td class="no">No</td>
+          <td class="partial">Manual</td>
+          <td class="no">No</td>
+        </tr>
+        <tr>
+          <td>Built-in audit trail</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="partial">Varies</td>
+          <td class="partial">Partial</td>
+          <td class="no">Manual</td>
+          <td class="no">No</td>
+        </tr>
+        <tr>
+          <td>No platform dependency</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="no">No</td>
+          <td class="no">No</td>
+          <td class="yes">Yes</td>
+          <td class="yes">Yes</td>
+        </tr>
+        <tr>
+          <td>Blast radius containment</td>
+          <td class="flow-col yes">Yes</td>
+          <td class="no">No</td>
+          <td class="no">No</td>
+          <td class="no">No</td>
+          <td style="color: var(--text-muted); opacity: 0.5;">N/A</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== CHANGE MANAGEMENT / DIFF ===== -->
+<section class="diff-section">
+  <div class="diff-inner">
+    <div class="section-label fade-in" style="color: var(--purple);">Change management</div>
+    <h2 class="fade-in">One line changed. One line reviewed.</h2>
+    <p class="fade-in">
+      When a policy changes, the diff tells the whole story. No 200-line JSON blob. No "what did that node change do?" Just plain text, reviewed in a pull request.
+    </p>
+
+    <div class="diff-grid">
+      <div class="diff-panel before fade-in">
+        <div class="diff-panel-header">Before — Pull Request #47</div>
+        <div class="diff-panel-body">
+          <div>step Check Credit:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;fetch credit report using CreditBureau</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with bvn application.bvn</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;save the result as credit_report</div>
+          <div>&nbsp;</div>
+          <div class="line-old">&nbsp;&nbsp;&nbsp;&nbsp;if credit_report.score is below 300:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;reject with "Credit score below minimum"</div>
+        </div>
+      </div>
+      <div class="diff-panel after fade-in">
+        <div class="diff-panel-header">After — Approved by @ops-lead</div>
+        <div class="diff-panel-body">
+          <div>step Check Credit:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;fetch credit report using CreditBureau</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with bvn application.bvn</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;save the result as credit_report</div>
+          <div>&nbsp;</div>
+          <div class="line-new">&nbsp;&nbsp;&nbsp;&nbsp;if credit_report.score is below 350:</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;reject with "Credit score below minimum"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== INDUSTRIES ===== -->
+<section class="industries-section">
+  <div class="industries-inner">
+    <div class="section-label fade-in">Built for</div>
+    <h2 class="fade-in">Where decisions are consequential</h2>
+    <p class="fade-in">
+      Flow is for organizations where business decisions affect people's money, health, safety, or access — and where proving how those decisions work isn't optional.
+    </p>
+
+    <div class="industry-grid">
+      <div class="industry-card fade-in">
+        <div class="ind-icon">🏦</div>
+        <h4>Financial Services</h4>
+        <p>Lending decisions, KYC, fraud detection, compliance reporting</p>
+      </div>
+      <div class="industry-card fade-in">
+        <div class="ind-icon">🏥</div>
+        <h4>Healthcare</h4>
+        <p>Patient triage, referral routing, treatment authorization</p>
+      </div>
+      <div class="industry-card fade-in">
+        <div class="ind-icon">🛡️</div>
+        <h4>Insurance</h4>
+        <p>Claims processing, underwriting rules, risk assessment</p>
+      </div>
+      <div class="industry-card fade-in">
+        <div class="ind-icon">🚚</div>
+        <h4>Logistics</h4>
+        <p>Delivery routing, exception handling, carrier selection</p>
+      </div>
+      <div class="industry-card fade-in">
+        <div class="ind-icon">⚖️</div>
+        <h4>Trust & Safety</h4>
+        <p>Content moderation, user risk scoring, escalation policies</p>
+      </div>
+      <div class="industry-card fade-in">
+        <div class="ind-icon">🛒</div>
+        <h4>E-Commerce</h4>
+        <p>Order processing, refund rules, seller verification</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ===== TERMINAL DEMO ===== -->
 <section class="demo-section">
   <div class="demo-inner">
@@ -978,23 +1354,16 @@
         <div class="dot" style="background:#22C55E"></div>
       </div>
       <div class="terminal-body">
-        <div class="prompt-line"><span class="info">$</span> <span class="cmd">flow check loan-review.flow</span></div>
-        <div class="output"><span class="success">✓</span> No errors found in loan-review.flow</div>
-        <br>
         <div class="prompt-line"><span class="info">$</span> <span class="cmd">flow run loan-review.flow --input '{"application": ...}'</span></div>
         <br>
-        <div class="output"><span class="step-label">▸ Step: Check Credit</span></div>
-        <div class="output">&nbsp;&nbsp;↳ Called CreditBureau API (Bearer auth)</div>
-        <div class="output">&nbsp;&nbsp;↳ Status: 200 — score: 720</div>
+        <div class="output"><span class="info">▶ Running:</span> Loan Application Review v2.1</div>
+        <div class="output">&nbsp;&nbsp;├─ Check Credit .............. <span class="success">done</span> <span style="color:var(--text-muted)">(420ms)</span></div>
+        <div class="output">&nbsp;&nbsp;├─ Assess Risk .............. <span class="success">done</span> <span style="color:var(--text-muted)">(1.2s)</span></div>
+        <div class="output">&nbsp;&nbsp;│&nbsp;&nbsp; └─ AI confidence: <span class="info">87%</span> <span style="color:var(--text-muted)">(above threshold)</span></div>
+        <div class="output">&nbsp;&nbsp;└─ Decide ................... <span class="success">done</span> <span style="color:var(--text-muted)">(89ms)</span></div>
         <br>
-        <div class="output"><span class="step-label">▸ Step: Assess Risk</span></div>
-        <div class="output">&nbsp;&nbsp;↳ AI assessment: "approved" (confidence: 0.87)</div>
-        <br>
-        <div class="output"><span class="step-label">▸ Step: Decide</span></div>
-        <div class="output">&nbsp;&nbsp;↳ Sent approval via SendGrid (status: 202)</div>
-        <div class="output">&nbsp;&nbsp;↳ Notified #sales on Slack webhook</div>
-        <br>
-        <div class="output"><span class="success">✓ Workflow completed</span> — status: approved</div>
+        <div class="output"><span class="success">✓ Complete:</span> status = "approved"</div>
+        <div class="output" style="color:var(--text-muted)">&nbsp;&nbsp;Log exported → ./logs/exec-2026-03-02.json</div>
       </div>
     </div>
   </div>

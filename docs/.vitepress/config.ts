@@ -13,8 +13,8 @@ export default defineConfig({
         ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
         ["meta", { name: "theme-color", content: "#6366f1" }],
         ["meta", { property: "og:type", content: "website" }],
-        ["meta", { property: "og:title", content: "Flow — Workflow Orchestration Language" }],
-        ["meta", { property: "og:description", content: "Write automated workflows in structured English. No semicolons, no brackets, no classes." }],
+        ["meta", { property: "og:title", content: "Flow — Business Rules That Execute" }],
+        ["meta", { property: "og:description", content: "Write business rules in plain English that actually run — versioned in Git, readable by compliance, auditable by default." }],
     ],
     themeConfig: {
         logo: "/logo.svg",

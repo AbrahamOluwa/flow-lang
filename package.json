@@ -1,7 +1,7 @@
 {
     "name": "flow-lang",
     "version": "0.2.0",
-    "description": "A domain-specific language for AI agent and workflow orchestration",
+    "description": "A language for writing business rules that execute — readable, versioned, and auditable",
     "type": "module",
     "main": "dist/cli/index.js",
     "bin": {
@@ -26,13 +26,13 @@
     "keywords": [
         "flow",
         "dsl",
-        "workflow",
-        "orchestration",
-        "ai-agent",
+        "business-rules",
+        "governance",
+        "compliance",
+        "audit-trail",
         "ai",
-        "automation",
-        "no-code",
-        "low-code"
+        "decision-logic",
+        "plain-text"
     ],
     "author": "Abraham Oluwa",
     "license": "MIT",

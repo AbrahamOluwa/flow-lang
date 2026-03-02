@@ -363,8 +363,8 @@ const program = new Command();
 
 program
     .name("flow")
-    .description("Flow — a language for AI agent and workflow orchestration")
-    .version("0.1.0");
+    .description("Flow — business rules that run, not rot")
+    .version("0.2.0");
 
 program
     .command("check <file>")

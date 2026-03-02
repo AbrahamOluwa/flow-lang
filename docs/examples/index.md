@@ -1,6 +1,6 @@
 # Examples
 
-Real-world workflow examples built with Flow. Each example is a complete, runnable `.flow` file.
+Real-world business rules written in Flow. Each example is a complete, runnable `.flow` file — the rule and the executable are the same artifact.
 
 ## Available examples
 
