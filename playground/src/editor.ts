@@ -23,7 +23,7 @@ monaco.languages.setMonarchTokensProvider("flow", {
         "still", "failing", "above", "below", "empty",
         "does", "status", "response", "headers",
     ],
-    typeKeywords: ["API", "AI", "plugin", "webhook"],
+    typeKeywords: ["API", "AI", "plugin", "webhook", "database"],
 
     tokenizer: {
         root: [
@@ -40,7 +40,7 @@ monaco.languages.setMonarchTokensProvider("flow", {
             [/\b(true|false)\b/, "constant"],
 
             // Service type keywords
-            [/\b(API|AI|plugin|webhook)\b/, "type"],
+            [/\b(API|AI|plugin|webhook|database)\b/, "type"],
 
             // Colon at end of line (block opener)
             [/:/, "delimiter"],

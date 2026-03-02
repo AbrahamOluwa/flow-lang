@@ -73,6 +73,7 @@ export default defineConfig({
                         { text: "Stripe Checkout", link: "/examples/stripe-checkout" },
                         { text: "Slack Notification", link: "/examples/slack-notification" },
                         { text: "SendGrid Email", link: "/examples/sendgrid-email" },
+                        { text: "Inventory Lookup", link: "/examples/inventory-lookup" },
                     ],
                 },
             ],

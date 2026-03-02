@@ -8,6 +8,7 @@ import githubCode from "../github-lookup.flow?raw";
 import weatherCode from "../weather-alert.flow?raw";
 import cryptoCode from "../crypto-portfolio.flow?raw";
 import typoCode from "../typo.flow?raw";
+import inventoryCode from "../inventory-lookup.flow?raw";
 
 export interface Example {
     name: string;
@@ -70,6 +71,12 @@ export const EXAMPLES: Example[] = [
         description: "Loops, running totals, CoinGecko API",
         code: cryptoCode,
         input: '{ "coins": [{ "name": "bitcoin", "amount": 0.5, "price": 97000 }, { "name": "ethereum", "amount": 10, "price": 3200 }, { "name": "solana", "amount": 100, "price": 145 }] }',
+    },
+    {
+        name: "Inventory Lookup",
+        description: "Database queries, stock checks, empty handling",
+        code: inventoryCode,
+        input: '{ "request": { "product-id": 1 } }',
     },
     {
         name: "Error Demo",
