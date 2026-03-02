@@ -36,6 +36,7 @@ Each file automatically gets its own address based on its filename:
 | `--port` | Changes which port the server listens on | `--port 4000` |
 | `--verbose` | Shows details about each incoming request | `--verbose` |
 | `--mock` | Uses simulated services instead of real ones | `--mock` |
+| `--auth-token` | Requires a Bearer token for all requests | `--auth-token my-secret` |
 
 ```bash
 flow serve my-workflow.flow --port 4000 --verbose --mock
@@ -147,6 +148,75 @@ curl http://localhost:3000
 ## Error checking at startup
 
 Flow validates all your workflow files when the server starts. If any file has an error, the server won't start — it will show you exactly what's wrong so you can fix it first. This means once the server is running, you can be confident that all your workflows are properly written.
+
+## Authentication
+
+You can protect your server so that only authorized clients can trigger workflows. Pass a secret token when starting the server:
+
+```bash
+flow serve ./workflows/ --auth-token my-secret-token
+```
+
+Or set the `FLOW_AUTH_TOKEN` environment variable:
+
+```bash
+export FLOW_AUTH_TOKEN=my-secret-token
+flow serve ./workflows/
+```
+
+When a token is configured, every request must include an `Authorization` header:
+
+```bash
+curl -X POST http://localhost:3000/email-verification \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer my-secret-token" \
+  -d '{"signup": {"email": "test@example.com"}}'
+```
+
+Requests without a valid token receive a `401 Unauthorized` response:
+
+```json
+{
+    "error": "Unauthorized",
+    "hint": "Provide a valid \"Authorization: Bearer <token>\" header."
+}
+```
+
+::: tip Health check is always public
+The `/health` endpoint does not require authentication, so load balancers and monitoring tools can check the server without a token.
+:::
+
+## Docker deployment
+
+Flow includes a Dockerfile for running workflows in a container. Build the image:
+
+```bash
+docker build -t flow-server .
+```
+
+Run it, mounting your `.flow` files into the container:
+
+```bash
+docker run -p 3000:3000 -v ./workflows:/workflows flow-server
+```
+
+With authentication and environment variables for your services:
+
+```bash
+docker run -p 3000:3000 \
+  -v ./workflows:/workflows \
+  -e FLOW_AUTH_TOKEN=my-secret-token \
+  -e API_KEY=your-api-key \
+  flow-server
+```
+
+The default command is `serve /workflows --port 3000`. You can override it for a single file:
+
+```bash
+docker run -p 3000:3000 \
+  -v ./my-workflow.flow:/app/my-workflow.flow \
+  flow-server serve /app/my-workflow.flow --port 3000 --mock
+```
 
 ## Testing mode
 

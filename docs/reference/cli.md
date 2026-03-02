@@ -193,6 +193,7 @@ flow serve <target> [options]
 | `--port <number>` | Port to listen on (default: 3000) |
 | `--verbose` | Log each incoming request |
 | `--mock` | Use mock services instead of real connectors |
+| `--auth-token <token>` | Require Bearer token for all requests (health check excluded) |
 
 ### Examples
 
@@ -208,6 +209,9 @@ flow serve my-workflow.flow --port 4000 --verbose
 
 # Mock mode for development
 flow serve my-workflow.flow --mock
+
+# Require authentication
+flow serve ./workflows/ --auth-token my-secret-token
 ```
 
 ### Routes

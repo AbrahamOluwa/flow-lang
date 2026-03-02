@@ -17,14 +17,21 @@ services:
 
 Each service declaration has three parts:
 - **A name** — what you'll call it in your workflow (e.g., `GitHub`, `Stripe`)
-- **A type** — what kind of service it is (`API`, `webhook`, `plugin`, or `AI`)
-- **A location** — the URL, plugin name, or AI model to use
+- **A type** — what kind of service it is (`API`, `webhook`, `plugin`, `AI`, or `database`)
+- **A location** — the URL, plugin name, AI model, or database file path
 
 You can also declare **webhooks** — services that always receive data via POST:
 
 ```txt
 services:
     SlackNotifier is a webhook at "https://hooks.slack.com/services/..."
+```
+
+You can also declare **databases** — SQLite databases that your workflow can query and modify:
+
+```txt
+services:
+    DB is a database at "./inventory.sqlite"
 ```
 
 ## Using a service in your workflow
@@ -204,6 +211,93 @@ Many services require a secret key (sometimes called an API key) to verify your 
    ```
 
 The `.env` file stays on your computer and should never be shared or uploaded to the internet.
+
+## Databases
+
+Flow can query SQLite databases directly. Declare a database service with the path to a `.sqlite` file:
+
+```txt
+services:
+    DB is a database at "./inventory.sqlite"
+```
+
+Use `:memory:` for an in-memory database (useful for testing):
+
+```txt
+services:
+    TestDB is a database at ":memory:"
+```
+
+### Querying data
+
+Use `at` to specify the table name, and `with` to filter:
+
+```txt
+get product using DB at "products" with id 42
+    save the result as product
+
+list orders using DB at "orders" with status "active"
+    save the result as active-orders
+```
+
+The action word determines what kind of query runs:
+
+| What you write | What happens |
+|---|---|
+| `get`, `fetch`, `find` | Returns a single row |
+| `list`, `search`, `query` | Returns all matching rows |
+| `count` | Returns the number of matching rows |
+| `insert`, `create`, `add` | Inserts a new row |
+| `update`, `modify` | Updates existing rows |
+| `delete`, `remove` | Deletes matching rows |
+
+### Inserting data
+
+```txt
+insert record using DB at "audit_log" with action "login" and user_id user-id
+    save the result as entry
+```
+
+The result contains the `id` of the new row.
+
+### Updating data
+
+The `id` parameter specifies which row to update. All other parameters become the new values:
+
+```txt
+update record using DB at "users" with id user-id and status "verified"
+    save the result as result
+```
+
+### Deleting data
+
+```txt
+delete record using DB at "sessions" with expired true
+    save the result as result
+```
+
+### Raw SQL
+
+For complex queries, use the `query` parameter to write SQL directly:
+
+```txt
+run query using DB with query "SELECT COUNT(*) as total FROM orders WHERE date > :date" and date "2024-01-01"
+    save the result as stats
+```
+
+Additional parameters (like `date` above) become named bindings in the SQL — they are never concatenated into the query, so SQL injection is prevented.
+
+### Empty results
+
+When a `get` query finds no matching rows, the result is `empty`. Use `is empty` to check:
+
+```txt
+get user using DB at "users" with email request.email
+    save the result as user
+
+if user is empty:
+    reject with "User not found"
+```
 
 ## Next steps
 

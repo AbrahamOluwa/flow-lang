@@ -92,6 +92,7 @@ flow test <file> --output-log test.json    # Write structured JSON log
 flow serve <file-or-dir>                   # Start webhook server
 flow serve <file-or-dir> --port 4000       # Custom port (default: 3000)
 flow serve <file-or-dir> --mock            # Serve with mock connectors
+flow serve <file-or-dir> --auth-token xyz  # Require Bearer token for requests
 ```
 
 ## The language
@@ -204,6 +205,9 @@ services:
     # Webhooks
     Slack is a webhook at "https://hooks.slack.com/..."
 
+    # Databases (SQLite)
+    DB is a database at "./inventory.sqlite"
+
     # Plugins
     Stripe is a plugin "stripe-payments"
 ```
@@ -239,7 +243,7 @@ TypeScript implementation. Each stage is independent and testable in isolation.
 - **Analyzer** — Static checks before execution: service resolution, variable def-before-use, scope validation, duplicate detection
 - **Runtime** — Async tree-walking interpreter with real HTTP calls, AI SDK integration, retry with actual delays, and structured logging
 
-468 tests across all stages. No `any` types. Vitest.
+524 tests across all stages. No `any` types. Vitest.
 
 ## Error messages
 
@@ -282,6 +286,7 @@ The [`examples/`](examples/) directory has complete workflows:
 - **stripe-checkout.flow** — Stripe payments with retry and Slack notification
 - **slack-notification.flow** — Deployment notifications
 - **sendgrid-email.flow** — Transactional email with status verification
+- **inventory-lookup.flow** — SQLite database queries with stock checks
 - **loan-application.flow** — Full pipeline: credit, risk, fraud, approval
 
 ## Documentation
@@ -290,6 +295,56 @@ The [`examples/`](examples/) directory has complete workflows:
 - [Getting Started](https://abrahamoluwa.github.io/flow-lang/guide/getting-started) — Two-track guide for engineers and ops teams
 - [Language Reference](https://abrahamoluwa.github.io/flow-lang/reference/language) — Complete syntax
 - [Playground](https://abrahamoluwa.github.io/flow-lang/playground/) — Try Flow in the browser, no install
+
+## Authentication
+
+Protect your webhook server with a Bearer token:
+
+```bash
+# Via CLI flag
+flow serve ./workflows/ --auth-token my-secret-token
+
+# Or via environment variable
+export FLOW_AUTH_TOKEN=my-secret-token
+flow serve ./workflows/
+```
+
+Clients must include the token in every request:
+
+```bash
+curl -X POST http://localhost:3000/email-verification \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer my-secret-token" \
+  -d '{"signup": {"email": "test@example.com"}}'
+```
+
+The `/health` endpoint is always public (no token required) so load balancers can check server status.
+
+## Docker
+
+Run Flow workflows in a container:
+
+```bash
+docker build -t flow-server .
+docker run -p 3000:3000 -v ./workflows:/workflows flow-server
+```
+
+With authentication and environment variables:
+
+```bash
+docker run -p 3000:3000 \
+  -v ./workflows:/workflows \
+  -e FLOW_AUTH_TOKEN=my-secret-token \
+  -e API_KEY=your-api-key \
+  flow-server
+```
+
+The default entrypoint runs `flow serve /workflows --port 3000`. Override with custom arguments:
+
+```bash
+docker run -p 4000:4000 -v ./my-flow.flow:/app/my-flow.flow \
+  flow-server serve /app/my-flow.flow --port 4000 --mock
+```
 
 ## Editor support
 
@@ -308,7 +363,7 @@ git clone https://github.com/AbrahamOluwa/flow-lang.git
 cd flow-lang
 npm install
 npm run build
-npm run test    # 468 tests across all pipeline stages
+npm run test    # 524 tests across all pipeline stages
 ```
 
 ## License
