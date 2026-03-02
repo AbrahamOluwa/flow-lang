@@ -98,12 +98,13 @@ onMounted(() => {
                         </p>
                     </div>
                     <div class="fh-problem-card fade-in" data-accent="red">
-                        <div class="fh-problem-icon">&#x1F9E0;</div>
-                        <h3>The person</h3>
+                        <div class="fh-problem-icon">&#x1F916;</div>
+                        <h3>The AI agent</h3>
                         <p>
-                            One senior analyst just knows how it really works.
-                            They've been here since the beginning. Nobody has
-                            written it down.
+                            An AI model scores fraud risk, but the confidence
+                            thresholds and escalation rules are buried in the
+                            codebase. No one outside engineering knows when
+                            transactions get blocked.
                         </p>
                     </div>
                 </div>
@@ -147,18 +148,20 @@ onMounted(() => {
                                 class="fh-code-body"
                                 v-pre
                             ><span class="cm"># The Notion doc says:</span>
-<span class="str">"Check credit score. If below 300, reject."</span>
+<span class="str">"Block transactions over $5,000. Flag anything
+ the AI scores above 70%."</span>
 
 <span class="cm"># The Python code says:</span>
-<span class="kw">if</span> resp.json()[<span class="str">"data"</span>][<span class="str">"score"</span>] &lt; <span class="num">350</span>:
-    <span class="cm"># was 300, changed in hotfix #4127</span>
-    <span class="fn">raise</span> Exception(<span class="str">"rejected"</span>)
+<span class="kw">if</span> txn[<span class="str">"amount"</span>] &gt; <span class="num">10000</span>:  <span class="cm"># was 5000</span>
+    <span class="fn">raise</span> FraudBlock(<span class="str">"high_value"</span>)
+<span class="kw">if</span> ai_score &gt; <span class="num">0.75</span>:  <span class="cm"># changed in PR #891</span>
+    flag_for_review(txn)
 
 <span class="cm"># The Slack thread says:</span>
-<span class="str">"Actually we changed it to 350 last month
- but forgot to update the doc"</span>
+<span class="str">"We raised the threshold to 10k last month
+ after too many false positives"</span>
 
-<span class="cm"># Nobody knows which is correct.</span></pre>
+<span class="cm"># Nobody knows which rules are live.</span></pre>
                         </div>
                     </div>
                     <div class="fade-in">
@@ -171,21 +174,26 @@ onMounted(() => {
                                 <span class="fh-dot fh-dot-y"></span>
                                 <span class="fh-dot fh-dot-g"></span>
                                 <span class="fh-code-filename"
-                                    >loan-review.flow</span
+                                    >transaction-fraud.flow</span
                                 >
                             </div>
                             <pre
                                 class="fh-code-body"
                                 v-pre
-                            ><span class="kw">step</span> Check Credit:
-    fetch credit report <span class="kw">using</span> <span class="svc">CreditBureau</span>
-        <span class="kw">with</span> bvn application.bvn
-        <span class="kw">save the result as</span> credit_report
+                            ><span class="kw">services:</span>
+    RiskScorer <span class="kw">is an AI using</span> <span class="str">"anthropic/claude-sonnet"</span>
+    FraudOps <span class="kw">is a webhook at</span> <span class="str">"https://hooks.slack.com/..."</span>
 
-    <span class="kw">if</span> credit_report.score <span class="kw">is below</span> <span class="num">350</span>:
-        send rejection <span class="kw">using</span> <span class="svc">SendGrid</span>
-            <span class="kw">to</span> application.email
-        <span class="kw">reject with</span> <span class="str">"Credit score too low"</span>
+<span class="kw">step</span> Decision:
+    <span class="kw">ask</span> <span class="svc">RiskScorer</span> <span class="kw">to</span> analyze this transaction
+        <span class="kw">save the result as</span> assessment
+        <span class="kw">save the confidence as</span> ai-confidence
+
+    <span class="kw">if</span> combined-score <span class="kw">is above</span> <span class="num">75</span>:
+        <span class="kw">set</span> decision <span class="kw">to</span> <span class="str">"block"</span>
+    <span class="kw">otherwise if</span> combined-score <span class="kw">is above</span> <span class="num">40</span>:
+        <span class="kw">set</span> decision <span class="kw">to</span> <span class="str">"review"</span>
+        notify fraud team <span class="kw">using</span> <span class="svc">FraudOps</span>
 
 <span class="cm"># This file IS the rule.</span>
 <span class="cm"># It runs. It's versioned. It's reviewable.</span></pre>
@@ -195,14 +203,14 @@ onMounted(() => {
             </div>
         </section>
 
-        <!-- ===== WHAT FLOW IS ===== -->
+        <!-- ===== WHAT FLOW GIVES YOU ===== -->
         <section class="fh-section fh-section-alt">
             <div class="fh-container">
-                <div class="fh-section-label fade-in">What a .flow file is</div>
-                <h2 class="fh-section-title fade-in">Four things. One file.</h2>
+                <div class="fh-section-label fade-in">What Flow gives you</div>
+                <h2 class="fh-section-title fade-in">Prove how your decisions work</h2>
                 <p class="fh-section-lead fade-in">
-                    Today these are four different systems. Flow makes them one
-                    artifact.
+                    Six properties, each earned by design &mdash; not bolted on
+                    after the fact.
                 </p>
 
                 <div class="fh-pillars">
@@ -210,41 +218,66 @@ onMounted(() => {
                         <div class="fh-pillar-icon fh-pillar-cyan">
                             &#x1F4D6;
                         </div>
-                        <h3>Process document</h3>
+                        <h3>Readable by anyone</h3>
                         <p>
-                            Anyone on the team can read and understand the
-                            business logic. No code literacy required.
+                            A compliance officer, an ops lead, or a regulator
+                            can read a .flow file and understand exactly what
+                            the system does. No engineering degree required.
                         </p>
                     </div>
                     <div class="fh-pillar fade-in">
                         <div class="fh-pillar-icon fh-pillar-green">
                             &#x26A1;
                         </div>
-                        <h3>Executable program</h3>
+                        <h3>Executable as written</h3>
                         <p>
-                            Calls APIs, invokes AI agents, makes decisions,
-                            sends notifications. Runs identically every time.
+                            The same file that documents the process runs in
+                            production. The specification is the implementation.
+                            They can't drift apart.
                         </p>
                     </div>
                     <div class="fh-pillar fade-in">
                         <div class="fh-pillar-icon fh-pillar-amber">
-                            &#x1F500;
+                            &#x1F50D;
                         </div>
-                        <h3>Versioned artifact</h3>
+                        <h3>Auditable by default</h3>
                         <p>
-                            Lives in Git. Clean, reviewable diffs. "Changed
-                            threshold from 300 to 350" &mdash; one line,
-                            reviewed, merged.
+                            Every execution produces a structured log. Every
+                            change lives in Git with full attribution. You
+                            don't prepare for audits &mdash; you're always ready.
                         </p>
                     </div>
                     <div class="fh-pillar fade-in">
                         <div class="fh-pillar-icon fh-pillar-purple">
-                            &#x1F50D;
+                            &#x1F916;
                         </div>
-                        <h3>Audit trail</h3>
+                        <h3>AI, governed</h3>
                         <p>
-                            Every execution logged with full context. Hand the
-                            file to an auditor. They can read it.
+                            AI is a named participant with explicit instructions,
+                            confidence thresholds, and fallback rules &mdash; all
+                            visible in the file. Not a black box.
+                        </p>
+                    </div>
+                    <div class="fh-pillar fade-in">
+                        <div class="fh-pillar-icon fh-pillar-red">
+                            &#x1F512;
+                        </div>
+                        <h3>Secure by design</h3>
+                        <p>
+                            Seven constructs. No imports, no shell commands, no
+                            filesystem access. A .flow file can only do what it
+                            explicitly declares. The blast radius is contained.
+                        </p>
+                    </div>
+                    <div class="fh-pillar fade-in">
+                        <div class="fh-pillar-icon fh-pillar-pink">
+                            &#x1F4C1;
+                        </div>
+                        <h3>You own the file</h3>
+                        <p>
+                            Plain text in your Git repo. No platform dependency.
+                            No vendor lock-in. No subscription required to read
+                            your own business logic.
                         </p>
                     </div>
                 </div>
@@ -303,6 +336,184 @@ onMounted(() => {
             </div>
         </section>
 
+        <!-- ===== COMPARISON TABLE ===== -->
+        <section class="fh-section fh-section-alt">
+            <div class="fh-container">
+                <div class="fh-section-label fade-in" style="color: var(--fh-amber)">How Flow compares</div>
+                <h2 class="fh-section-title fade-in">Not another automation tool</h2>
+                <p class="fh-section-lead fade-in">
+                    Flow doesn't compete with Zapier for simple automations or
+                    with Python for general programming. Flow governs the
+                    decisions that matter.
+                </p>
+
+                <div style="overflow-x: auto" class="fade-in">
+                    <table class="fh-comp-table">
+                        <thead>
+                            <tr>
+                                <th>Capability</th>
+                                <th class="fh-flow-col">Flow</th>
+                                <th>AI Agent Platforms</th>
+                                <th>Zapier / n8n</th>
+                                <th>Python</th>
+                                <th>Documents</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Non-engineer can read it</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-partial">Varies</td>
+                                <td class="fh-partial">Partially</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-yes">Yes</td>
+                            </tr>
+                            <tr>
+                                <td>Actually executes</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-no">No</td>
+                            </tr>
+                            <tr>
+                                <td>Deterministic logic</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-na">N/A</td>
+                            </tr>
+                            <tr>
+                                <td>Meaningful diffs in Git</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-no">No</td>
+                            </tr>
+                            <tr>
+                                <td>AI as governed participant</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-partial">Partial</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-partial">Manual</td>
+                                <td class="fh-no">No</td>
+                            </tr>
+                            <tr>
+                                <td>Built-in audit trail</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-partial">Varies</td>
+                                <td class="fh-partial">Partial</td>
+                                <td class="fh-no">Manual</td>
+                                <td class="fh-no">No</td>
+                            </tr>
+                            <tr>
+                                <td>No platform dependency</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-yes">Yes</td>
+                                <td class="fh-yes">Yes</td>
+                            </tr>
+                            <tr>
+                                <td>Blast radius containment</td>
+                                <td class="fh-flow-col fh-yes">Yes</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-no">No</td>
+                                <td class="fh-na">N/A</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== CHANGE MANAGEMENT / DIFF ===== -->
+        <section class="fh-section">
+            <div class="fh-container">
+                <div class="fh-section-label fade-in" style="color: var(--fh-purple)">Change management</div>
+                <h2 class="fh-section-title fade-in">One line changed. One line reviewed.</h2>
+                <p class="fh-section-lead fade-in">
+                    When a policy changes, the diff tells the whole story. No
+                    200-line JSON blob. No "what did that node change do?" Just
+                    plain text, reviewed in a pull request.
+                </p>
+
+                <div class="fh-diff-grid">
+                    <div class="fh-diff-panel fh-diff-before fade-in">
+                        <div class="fh-diff-header">Before &mdash; Pull Request #47</div>
+                        <div class="fh-diff-body" v-pre>
+                            <div>step RuleBasedScreening:</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to 0</div>
+                            <div>&nbsp;</div>
+                            <div class="fh-line-old">&nbsp;&nbsp;&nbsp;&nbsp;if amount is above 5000:</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to rule-score plus 40</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;log "High-value flag: {amount}"</div>
+                        </div>
+                    </div>
+                    <div class="fh-diff-panel fh-diff-after fade-in">
+                        <div class="fh-diff-header">After &mdash; Approved by @fraud-ops-lead</div>
+                        <div class="fh-diff-body" v-pre>
+                            <div>step RuleBasedScreening:</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to 0</div>
+                            <div>&nbsp;</div>
+                            <div class="fh-line-new">&nbsp;&nbsp;&nbsp;&nbsp;if amount is above 10000:</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;set rule-score to rule-score plus 40</div>
+                            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;log "High-value flag: {amount}"</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== INDUSTRIES ===== -->
+        <section class="fh-section fh-section-alt">
+            <div class="fh-container">
+                <div class="fh-section-label fade-in">Built for</div>
+                <h2 class="fh-section-title fade-in">Where decisions are consequential</h2>
+                <p class="fh-section-lead fade-in">
+                    Flow is for organizations where business decisions affect
+                    people's money, health, safety, or access &mdash; and where
+                    proving how those decisions work isn't optional.
+                </p>
+
+                <div class="fh-industry-grid">
+                    <div class="fh-industry-card fade-in">
+                        <div class="fh-ind-icon">&#x1F3E6;</div>
+                        <h4>Financial Services</h4>
+                        <p>Lending decisions, KYC, fraud detection, compliance reporting</p>
+                    </div>
+                    <div class="fh-industry-card fade-in">
+                        <div class="fh-ind-icon">&#x1F3E5;</div>
+                        <h4>Healthcare</h4>
+                        <p>Patient triage, referral routing, treatment authorization</p>
+                    </div>
+                    <div class="fh-industry-card fade-in">
+                        <div class="fh-ind-icon">&#x1F6E1;&#xFE0F;</div>
+                        <h4>Insurance</h4>
+                        <p>Claims processing, underwriting rules, risk assessment</p>
+                    </div>
+                    <div class="fh-industry-card fade-in">
+                        <div class="fh-ind-icon">&#x1F69A;</div>
+                        <h4>Logistics</h4>
+                        <p>Delivery routing, exception handling, carrier selection</p>
+                    </div>
+                    <div class="fh-industry-card fade-in">
+                        <div class="fh-ind-icon">&#x2696;&#xFE0F;</div>
+                        <h4>Trust &amp; Safety</h4>
+                        <p>Content moderation, user risk scoring, escalation policies</p>
+                    </div>
+                    <div class="fh-industry-card fade-in">
+                        <div class="fh-ind-icon">&#x1F6D2;</div>
+                        <h4>E-Commerce</h4>
+                        <p>Order processing, refund rules, seller verification</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- ===== TERMINAL DEMO ===== -->
         <section class="fh-section fh-section-alt">
             <div class="fh-container fh-container-narrow">
@@ -331,60 +542,57 @@ onMounted(() => {
                         <div class="fh-term-prompt">
                             <span class="fh-term-dollar">$</span>
                             <span class="fh-term-cmd"
-                                >flow check loan-review.flow</span
+                                >flow check transaction-fraud.flow</span
                             >
                         </div>
                         <div class="fh-term-output">
                             <span class="fh-term-success">&#x2713;</span> No
-                            errors found in loan-review.flow
+                            errors found in transaction-fraud.flow
                         </div>
                         <br />
                         <div class="fh-term-prompt">
                             <span class="fh-term-dollar">$</span>
                             <span class="fh-term-cmd"
-                                >flow run loan-review.flow --input
-                                '{"application": ...}'</span
+                                >flow run transaction-fraud.flow --input
+                                '{"transaction": ...}'</span
                             >
                         </div>
                         <br />
                         <div class="fh-term-output">
                             <span class="fh-term-step"
-                                >&#x25B8; Step: Check Credit</span
+                                >&#x25B8; Step: RuleBasedScreening</span
                             >
                         </div>
                         <div class="fh-term-output">
-                            &nbsp;&nbsp;&#x21B3; Fetched credit report — score:
-                            720
+                            &nbsp;&nbsp;&#x21B3; Rule score: 40
                         </div>
                         <br />
                         <div class="fh-term-output">
                             <span class="fh-term-step"
-                                >&#x25B8; Step: Assess Risk</span
+                                >&#x25B8; Step: AIRiskAssessment</span
                             >
                         </div>
                         <div class="fh-term-output">
-                            &nbsp;&nbsp;&#x21B3; AI assessment: "approved"
-                            (confidence: 0.87)
+                            &nbsp;&nbsp;&#x21B3; AI confidence: 0.82
                         </div>
                         <br />
                         <div class="fh-term-output">
                             <span class="fh-term-step"
-                                >&#x25B8; Step: Decide</span
+                                >&#x25B8; Step: DecisionEngine</span
                             >
                         </div>
                         <div class="fh-term-output">
-                            &nbsp;&nbsp;&#x21B3; Sent approval email to
-                            ada@example.com
+                            &nbsp;&nbsp;&#x21B3; Combined score: 61 &#x2192; review
                         </div>
                         <div class="fh-term-output">
-                            &nbsp;&nbsp;&#x21B3; Notified #sales on Slack
+                            &nbsp;&nbsp;&#x21B3; Fraud ops notified
                         </div>
                         <br />
                         <div class="fh-term-output">
                             <span class="fh-term-success"
                                 >&#x2713; Workflow completed</span
                             >
-                            — status: processed
+                            — decision: review, score: 61
                         </div>
                     </div>
                 </div>
@@ -826,7 +1034,7 @@ onMounted(() => {
 /* ===== PILLARS ===== */
 .fh-pillars {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
 }
 
@@ -867,6 +1075,12 @@ onMounted(() => {
 }
 .fh-pillar-purple {
     background: var(--fh-purple-dim);
+}
+.fh-pillar-red {
+    background: var(--fh-red-dim);
+}
+.fh-pillar-pink {
+    background: rgba(244, 114, 182, 0.12);
 }
 
 .fh-pillar h3 {
@@ -982,6 +1196,156 @@ onMounted(() => {
     color: var(--fh-amber);
 }
 
+/* ===== COMPARISON TABLE ===== */
+.fh-comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.fh-comp-table th {
+    text-align: left;
+    padding: 14px 16px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.72rem;
+    color: var(--fh-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--fh-border);
+    background: var(--fh-bg-alt);
+}
+
+.fh-comp-table th:first-child {
+    border-radius: 8px 0 0 0;
+}
+.fh-comp-table th:last-child {
+    border-radius: 0 8px 0 0;
+}
+
+.fh-comp-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--fh-border);
+    color: var(--fh-text-muted);
+}
+
+.fh-comp-table td:first-child {
+    color: var(--fh-text);
+    font-weight: 500;
+}
+
+.fh-flow-col {
+    background: rgba(99, 102, 241, 0.04);
+}
+
+.fh-yes {
+    color: var(--fh-green);
+    font-weight: 500;
+}
+
+.fh-no {
+    color: var(--fh-text-muted);
+    opacity: 0.5;
+}
+
+.fh-partial {
+    color: var(--fh-amber);
+}
+
+.fh-na {
+    color: var(--fh-text-muted);
+    opacity: 0.5;
+}
+
+/* ===== DIFF / CHANGE MANAGEMENT ===== */
+.fh-diff-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.fh-diff-panel {
+    background: var(--fh-bg-card);
+    border: 1px solid var(--fh-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.fh-diff-header {
+    padding: 14px 20px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--fh-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fh-diff-before .fh-diff-header {
+    color: var(--fh-red);
+    background: var(--fh-red-dim);
+}
+
+.fh-diff-after .fh-diff-header {
+    color: var(--fh-green);
+    background: var(--fh-green-dim);
+}
+
+.fh-diff-body {
+    padding: 24px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82rem;
+    line-height: 1.9;
+    color: var(--fh-text-secondary);
+}
+
+.fh-line-old {
+    color: var(--fh-red);
+    opacity: 0.7;
+}
+
+.fh-line-new {
+    color: var(--fh-green);
+}
+
+/* ===== INDUSTRIES ===== */
+.fh-industry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.fh-industry-card {
+    background: var(--fh-bg-card);
+    border: 1px solid var(--fh-border);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    transition: all 0.3s;
+}
+
+.fh-industry-card:hover {
+    border-color: var(--fh-accent);
+    transform: translateY(-2px);
+}
+
+.fh-ind-icon {
+    font-size: 1.8rem;
+    margin-bottom: 14px;
+}
+
+.fh-industry-card h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--fh-text);
+}
+
+.fh-industry-card p {
+    font-size: 0.82rem;
+    color: var(--fh-text-muted);
+    line-height: 1.6;
+}
+
 /* ===== CTA ===== */
 .fh-cta {
     padding: 140px 0;
@@ -1044,6 +1408,19 @@ onMounted(() => {
     .fh-problem-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+    .fh-diff-grid {
+        grid-template-columns: 1fr;
+    }
+    .fh-comp-table {
+        font-size: 0.78rem;
+    }
+    .fh-comp-table th,
+    .fh-comp-table td {
+        padding: 10px 8px;
+    }
+    .fh-industry-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
     .fh-hero {
         padding: 100px 0 60px;
         min-height: auto;
@@ -1061,6 +1438,9 @@ onMounted(() => {
         grid-template-columns: 1fr;
     }
     .fh-problem-grid {
+        grid-template-columns: 1fr;
+    }
+    .fh-industry-grid {
         grid-template-columns: 1fr;
     }
     .fh-hero-actions {
