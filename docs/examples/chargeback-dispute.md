@@ -1,0 +1,193 @@
+# Chargeback Dispute Handler
+
+Evidence gathering, AI-powered dispute recommendation, and automated contest/accept submission through a payment processor.
+
+## Full source
+
+```txt
+# Chargeback Dispute Handler
+# Gathers evidence from transaction DB, shipping tracker, and customer history.
+# AI builds a dispute response. Submits contest or accept through payment processor.
+
+config:
+    name: "Chargeback Dispute Handler"
+    version: 1
+    description: "Evidence gathering, AI recommendation, and dispute submission"
+    timeout: 5 minutes
+
+services:
+    TransactionDB is an API at "https://transactions.example.com/api"
+    ShippingTracker is an API at "https://shipping.example.com/api"
+        with headers:
+            Authorization: "Bearer {env.SHIPPING_API_KEY}"
+    CustomerDB is an API at "https://customers.example.com/api"
+    CaseBuilder is an AI using "anthropic/claude-sonnet-4-20250514"
+    PaymentProcessor is an API at "https://payments.example.com/api"
+        with headers:
+            Authorization: "Bearer {env.PAYMENTS_API_KEY}"
+    DisputeOps is a webhook at "https://hooks.slack.com/services/dispute-ops"
+
+workflow:
+    trigger: when a chargeback dispute is received
+
+    set dispute-id to chargeback.dispute_id
+    set transaction-id to chargeback.transaction_id
+    set amount to chargeback.amount
+    set reason-code to chargeback.reason_code
+    set customer-id to chargeback.customer_id
+    set filed-date to chargeback.filed_date
+    log "Dispute received: {dispute-id} for transaction {transaction-id}, amount: {amount}"
+
+    # --------------------------------------------------------
+    # Step 1: Validate the dispute
+    # --------------------------------------------------------
+    step ValidateDispute:
+        if dispute-id is empty:
+            reject with "Missing dispute ID"
+        if transaction-id is empty:
+            reject with "Missing transaction ID"
+        if amount is empty:
+            reject with "Missing dispute amount"
+        log "Dispute validated: {dispute-id}, reason: {reason-code}"
+
+    # --------------------------------------------------------
+    # Step 2: Gather original transaction evidence
+    # --------------------------------------------------------
+    step GatherTransactionEvidence:
+        fetch transaction using TransactionDB at "/transactions/{transaction-id}"
+            save the result as original-transaction
+            on failure:
+                retry 2 times waiting 3 seconds
+                if still failing:
+                    log "Could not fetch original transaction"
+                    reject with "Transaction evidence unavailable"
+        set transaction-date to original-transaction.date
+        set transaction-amount to original-transaction.amount
+        log "Transaction evidence gathered: {transaction-date}, {transaction-amount}"
+
+    # --------------------------------------------------------
+    # Step 3: Gather shipping evidence (only for product_not_received)
+    # --------------------------------------------------------
+    step GatherShippingEvidence:
+        if reason-code is "product_not_received":
+            fetch shipping details using ShippingTracker at "/shipments/{transaction-id}"
+                save the result as shipping-info
+                on failure:
+                    retry 1 times waiting 3 seconds
+                    if still failing:
+                        log "Shipping data unavailable"
+                        set shipping-info to "unavailable"
+            log "Shipping evidence gathered for {transaction-id}"
+        otherwise:
+            set shipping-info to "not applicable"
+            log "Shipping evidence not required for reason: {reason-code}"
+
+    # --------------------------------------------------------
+    # Step 4: Gather customer history
+    # --------------------------------------------------------
+    step GatherCustomerHistory:
+        fetch customer profile using CustomerDB at "/customers/{customer-id}"
+            save the result as customer-data
+            on failure:
+                retry 1 times waiting 3 seconds
+                if still failing:
+                    log "Customer data unavailable"
+                    set customer-data to "unavailable"
+        set dispute-count to customer-data.dispute_count
+        set account-age to customer-data.account_age_months
+        set total-spend to customer-data.total_spend
+        log "Customer history: {dispute-count} disputes, account age {account-age} months, total spend {total-spend}"
+
+    # --------------------------------------------------------
+    # Step 5: Build dispute response with AI
+    # --------------------------------------------------------
+    step BuildResponse:
+        ask CaseBuilder to "analyze this chargeback dispute and recommend whether to contest or accept based on the transaction evidence, shipping data, and customer history"
+            save the result as recommendation
+            save the confidence as recommendation-confidence
+        log "AI recommendation: {recommendation}, confidence: {recommendation-confidence}"
+
+        if recommendation-confidence is below 0.5:
+            set action to "escalate"
+            log "Low confidence ({recommendation-confidence}), escalating to manual review"
+        otherwise if recommendation contains "contest":
+            set action to "contest"
+            log "Decision: contest dispute {dispute-id}"
+        otherwise:
+            set action to "accept"
+            log "Decision: accept dispute {dispute-id}"
+
+    # --------------------------------------------------------
+    # Step 6: Submit dispute response
+    # --------------------------------------------------------
+    step SubmitResponse:
+        if action is "contest":
+            submit contest using PaymentProcessor at "/disputes/{dispute-id}/contest" with evidence recommendation and transaction-id transaction-id and amount amount
+                save the result as submission-result
+            log "Contest submitted for dispute {dispute-id}"
+        otherwise if action is "accept":
+            submit acceptance using PaymentProcessor at "/disputes/{dispute-id}/accept" with dispute-id dispute-id and amount amount
+                save the result as submission-result
+            log "Acceptance submitted for dispute {dispute-id}"
+        otherwise:
+            set submission-result to "pending manual review"
+            log "Dispute {dispute-id} escalated — no submission"
+
+    # --------------------------------------------------------
+    # Step 7: Notify the dispute ops team
+    # --------------------------------------------------------
+    step NotifyTeam:
+        notify dispute team using DisputeOps with dispute dispute-id and transaction transaction-id and amount amount and action action and recommendation recommendation
+            on failure:
+                retry 2 times waiting 5 seconds
+                if still failing:
+                    log "WARNING: Could not notify dispute ops team"
+        log "Dispute ops notified: {dispute-id} — {action}"
+
+    complete with dispute dispute-id and action action and amount amount and recommendation recommendation and confidence recommendation-confidence
+```
+
+## What this does
+
+1. **Validates the dispute** — checks that dispute ID, transaction ID, and amount are present
+2. **Gathers transaction evidence** — fetches the original transaction record from the transaction database
+3. **Gathers shipping evidence** — conditionally calls the shipping tracker only when the reason code is `product_not_received`
+4. **Gathers customer history** — retrieves dispute count, account age, and total spend from the customer database
+5. **Builds a dispute response** — asks AI to analyze the evidence and recommend contest or accept; uses `contains "contest"` string matching on the AI result
+6. **Submits the response** — conditionally routes to contest or accept endpoints via `at` path parameters
+7. **Notifies the team** — sends a summary to the dispute ops webhook with retry
+
+## Concepts demonstrated
+
+- **Conditional service calls** — shipping evidence is only gathered when `reason-code is "product_not_received"`
+- **String matching on AI results** — `if recommendation contains "contest"` to extract decisions from natural language
+- **Dynamic URL paths** — `at "/transactions/{transaction-id}"` and `at "/disputes/{dispute-id}/contest"`
+- **Multi-source evidence gathering** — combining data from TransactionDB, ShippingTracker, and CustomerDB
+- **AI confidence thresholds** — escalating to manual review when `recommendation-confidence is below 0.5`
+- **Authenticated headers** — `with headers:` on ShippingTracker and PaymentProcessor
+- **Webhook notifications** — alerting the dispute ops team with retry on failure
+
+## Running it
+
+```bash
+# Test with mock services (no API keys needed)
+flow run examples/chargeback-dispute.flow --mock \
+  --input '{"chargeback": {"dispute_id": "DSP-4892", "transaction_id": "TXN-7210", "amount": 249.99, "reason_code": "product_not_received", "customer_id": "CUST-1138", "filed_date": "2024-02-28"}}'
+
+# Run with real services (requires env vars)
+export ANTHROPIC_API_KEY=sk-ant-...
+export SHIPPING_API_KEY=ship_...
+export PAYMENTS_API_KEY=pay_...
+flow run examples/chargeback-dispute.flow \
+  --input '{"chargeback": {"dispute_id": "DSP-4892", "transaction_id": "TXN-7210", "amount": 249.99, "reason_code": "product_not_received", "customer_id": "CUST-1138", "filed_date": "2024-02-28"}}'
+```
+
+## As a webhook
+
+```bash
+flow serve examples/chargeback-dispute.flow --mock
+
+curl -X POST http://localhost:3000 \
+  -H "Content-Type: application/json" \
+  -d '{"chargeback": {"dispute_id": "DSP-4892", "transaction_id": "TXN-7210", "amount": 249.99, "reason_code": "product_not_received", "customer_id": "CUST-1138", "filed_date": "2024-02-28"}}'
+```

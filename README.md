@@ -274,6 +274,8 @@ Some of these are on the roadmap. Some are deliberate constraints.
 The [`examples/`](examples/) directory has complete workflows:
 
 - **transaction-fraud.flow** — Real-time fraud detection with AI risk scoring and human escalation
+- **payment-reconciliation.flow** — Batch reconciliation with loop totals and AI discrepancy analysis
+- **chargeback-dispute.flow** — Evidence gathering, AI recommendation, and dispute submission
 - **email-verification.flow** — Email validation with conditionals
 - **order-processing.flow** — Inventory, payment, AI confirmation
 - **github-scout.flow** — GitHub API with popularity scoring

@@ -485,3 +485,506 @@ describe("Integration — sendgrid-email.flow", () => {
         }
     });
 });
+
+// ============================================================
+// Transaction Fraud Detection
+// ============================================================
+
+describe("Integration — transaction-fraud.flow", () => {
+    const source = readExample("transaction-fraud.flow");
+
+    // Helper: build connectors with controllable AI confidence.
+    // The mock AI returns confidence 0.85 by default, which makes
+    // the combined score always >= 43 (review). Using 0.7 lets us
+    // test all three decision outcomes (approve / review / block).
+    function fraudConnectors(aiConfidence: number = 0.7): Map<string, ServiceConnector> {
+        const mockService: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({
+                        status: text("ok"),
+                        transactions_last_hour: num(2),
+                        transactions_last_day: num(10),
+                    }),
+                };
+            },
+        };
+        const aiService: ServiceConnector = {
+            async call(_verb: string, description: string) {
+                return {
+                    value: record({
+                        result: text(`mock risk analysis for: ${description}`),
+                        confidence: num(aiConfidence),
+                    }),
+                };
+            },
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("TransactionDB", mockService);
+        connectors.set("VelocityCheck", mockService);
+        connectors.set("RiskScorer", aiService);
+        connectors.set("FraudOps", mockService);
+        connectors.set("AuditTrail", mockService);
+        return connectors;
+    }
+
+    async function runFraud(
+        input: Record<string, unknown>,
+        aiConfidence: number = 0.7,
+    ): Promise<ExecutionResult> {
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        return await execute(program, source, {
+            connectors: fraudConnectors(aiConfidence),
+            input,
+        });
+    }
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "transaction-fraud.flow");
+    });
+
+    it("approves low-risk transaction", async () => {
+        // rule-score = 0 (low amount, card present, US, normal category)
+        // ai-score = 70 (0.7 * 100), combined = (0 + 70) / 2 = 35 → approve
+        const result = await runFraud({
+            transaction: {
+                id: "TXN-001",
+                amount: 500,
+                merchant: "Coffee Shop",
+                merchant_category: "food",
+                card_present: true,
+                customer_id: "CUST-001",
+                country: "US",
+            },
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["decision"]).toEqual(text("approve"));
+        }
+    });
+
+    it("flags medium-risk transaction for review", async () => {
+        // rule-score = 40 (amount >5000: +20, CNP + amount >2000: +20)
+        // ai-score = 70, combined = (40 + 70) / 2 = 55 → review
+        const result = await runFraud({
+            transaction: {
+                id: "TXN-002",
+                amount: 8500,
+                merchant: "Online Store",
+                merchant_category: "retail",
+                card_present: false,
+                customer_id: "CUST-002",
+                country: "US",
+            },
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["decision"]).toEqual(text("review"));
+        }
+    });
+
+    it("blocks high-risk transaction", async () => {
+        // rule-score = 105 (amount >10000: +40, gambling: +30, CNP: +20, cross-border: +15)
+        // ai-score = 70, combined = (105 + 70) / 2 = 88 → block
+        const result = await runFraud({
+            transaction: {
+                id: "TXN-003",
+                amount: 15000,
+                merchant: "Casino Online",
+                merchant_category: "gambling",
+                card_present: false,
+                customer_id: "CUST-003",
+                country: "NG",
+            },
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["decision"]).toEqual(text("block"));
+        }
+    });
+
+    it("executes all 7 steps", async () => {
+        const result = await runFraud({
+            transaction: {
+                id: "TXN-004",
+                amount: 500,
+                merchant: "Test Store",
+                merchant_category: "retail",
+                card_present: true,
+                customer_id: "CUST-004",
+                country: "US",
+            },
+        });
+        const stepStarts = result.log.filter(e => e.action.includes("started"));
+        const stepNames = stepStarts.map(e => e.step);
+        expect(stepNames).toContain("ValidateTransaction");
+        expect(stepNames).toContain("VelocityScreen");
+        expect(stepNames).toContain("RuleBasedScreening");
+        expect(stepNames).toContain("AIRiskAssessment");
+        expect(stepNames).toContain("DecisionEngine");
+        expect(stepNames).toContain("Escalation");
+        expect(stepNames).toContain("RecordAudit");
+    });
+
+    it("logs fraud check started", async () => {
+        const result = await runFraud({
+            transaction: {
+                id: "TXN-005",
+                amount: 100,
+                merchant: "Test",
+                merchant_category: "food",
+                card_present: true,
+                customer_id: "CUST-005",
+                country: "US",
+            },
+        });
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("Fraud check started"))).toBe(true);
+    });
+
+    it("rejects missing transaction ID", async () => {
+        // Reject happens in ValidateTransaction before any service calls,
+        // so default mock connectors from runFile are fine.
+        const result = await runFile(source, {
+            transaction: { id: "" },
+        });
+        expect(result.result.status).toBe("rejected");
+        if (result.result.status === "rejected") {
+            expect(result.result.message).toContain("Missing transaction ID");
+        }
+    });
+
+    it("logs combined risk score", async () => {
+        const result = await runFraud({
+            transaction: {
+                id: "TXN-006",
+                amount: 500,
+                merchant: "Test",
+                merchant_category: "food",
+                card_present: true,
+                customer_id: "CUST-006",
+                country: "US",
+            },
+        });
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("Combined risk score"))).toBe(true);
+    });
+});
+
+// ============================================================
+// Payment Reconciliation
+// ============================================================
+
+describe("Integration — payment-reconciliation.flow", () => {
+    const source = readExample("payment-reconciliation.flow");
+
+    function reconciliationConnectors(aiConfidence: number = 0.85): Map<string, ServiceConnector> {
+        const mockAPI: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({
+                        status: text("ok"),
+                        date: text("2024-03-01"),
+                        amount: num(5700),
+                    }),
+                };
+            },
+        };
+        const aiService: ServiceConnector = {
+            async call(_verb: string, description: string) {
+                return {
+                    value: record({
+                        result: text(`mock analysis for: ${description}`),
+                        confidence: num(aiConfidence),
+                    }),
+                };
+            },
+        };
+        const mockWebhook: ServiceConnector = {
+            async call() {
+                return { value: record({ ok: text("true") }) };
+            },
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("Ledger", mockAPI);
+        connectors.set("Processor", mockAPI);
+        connectors.set("Analyst", aiService);
+        connectors.set("FinanceOps", mockWebhook);
+        connectors.set("ReconciliationDB", mockAPI);
+        return connectors;
+    }
+
+    async function runReconciliation(
+        input: Record<string, unknown>,
+        aiConfidence: number = 0.85,
+    ): Promise<ExecutionResult> {
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        return await execute(program, source, {
+            connectors: reconciliationConnectors(aiConfidence),
+            input,
+        });
+    }
+
+    const balancedInput = {
+        reconciliation: {
+            batch_id: "BATCH-001",
+            date: "2024-03-01",
+            ledger_total: 5700,
+            ledger_count: 2,
+            settlements: [
+                { id: "SET-001", amount: 2500, status: "cleared" },
+                { id: "SET-002", amount: 3200, status: "cleared" },
+            ],
+        },
+    };
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "payment-reconciliation.flow");
+    });
+
+    it("reports balanced when totals match", async () => {
+        const result = await runReconciliation(balancedInput);
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["mismatch"]).toEqual({ type: "boolean", value: false });
+        }
+    });
+
+    it("detects count mismatch", async () => {
+        const result = await runReconciliation({
+            reconciliation: {
+                batch_id: "BATCH-002",
+                date: "2024-03-01",
+                ledger_total: 5700,
+                ledger_count: 5,
+                settlements: [
+                    { id: "SET-001", amount: 2500, status: "cleared" },
+                    { id: "SET-002", amount: 3200, status: "cleared" },
+                ],
+            },
+        });
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("Count difference"))).toBe(true);
+    });
+
+    it("detects total mismatch", async () => {
+        const result = await runReconciliation({
+            reconciliation: {
+                batch_id: "BATCH-003",
+                date: "2024-03-01",
+                ledger_total: 130000,
+                ledger_count: 2,
+                settlements: [
+                    { id: "SET-001", amount: 62500, status: "cleared" },
+                    { id: "SET-002", amount: 62500, status: "cleared" },
+                ],
+            },
+        });
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("Total difference"))).toBe(true);
+    });
+
+    it("executes all 6 steps", async () => {
+        const result = await runReconciliation(balancedInput);
+        const stepStarts = result.log.filter(e => e.action.includes("started"));
+        const stepNames = stepStarts.map(e => e.step);
+        expect(stepNames).toContain("ValidateRequest");
+        expect(stepNames).toContain("FetchRecords");
+        expect(stepNames).toContain("CalculateTotals");
+        expect(stepNames).toContain("CompareResults");
+        expect(stepNames).toContain("AnalyzeDiscrepancies");
+        expect(stepNames).toContain("RecordResult");
+    });
+
+    it("logs reconciliation start", async () => {
+        const result = await runReconciliation(balancedInput);
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("Reconciliation started"))).toBe(true);
+    });
+
+    it("rejects missing batch ID", async () => {
+        const result = await runReconciliation({
+            reconciliation: {
+                batch_id: "",
+                date: "2024-03-01",
+                ledger_total: 5700,
+                ledger_count: 2,
+                settlements: [{ id: "SET-001", amount: 5700, status: "cleared" }],
+            },
+        });
+        expect(result.result.status).toBe("rejected");
+        if (result.result.status === "rejected") {
+            expect(result.result.message).toContain("Missing batch ID");
+        }
+    });
+});
+
+// ============================================================
+// Chargeback Dispute Handler
+// ============================================================
+
+describe("Integration — chargeback-dispute.flow", () => {
+    const source = readExample("chargeback-dispute.flow");
+
+    function chargebackConnectors(
+        aiResult: string = "Based on the evidence, I recommend we accept this dispute.",
+        aiConfidence: number = 0.85,
+    ): Map<string, ServiceConnector> {
+        const mockAPI: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({
+                        status: text("ok"),
+                        date: text("2024-02-15"),
+                        amount: num(249.99),
+                        dispute_count: num(1),
+                        account_age_months: num(24),
+                        total_spend: num(5200),
+                        tracking: text("1Z999AA10123456784"),
+                        delivered: text("true"),
+                    }),
+                };
+            },
+        };
+        const aiService: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({
+                        result: text(aiResult),
+                        confidence: num(aiConfidence),
+                    }),
+                };
+            },
+        };
+        const mockWebhook: ServiceConnector = {
+            async call() {
+                return { value: record({ ok: text("true") }) };
+            },
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("TransactionDB", mockAPI);
+        connectors.set("ShippingTracker", mockAPI);
+        connectors.set("CustomerDB", mockAPI);
+        connectors.set("CaseBuilder", aiService);
+        connectors.set("PaymentProcessor", mockAPI);
+        connectors.set("DisputeOps", mockWebhook);
+        return connectors;
+    }
+
+    async function runChargeback(
+        input: Record<string, unknown>,
+        aiResult?: string,
+        aiConfidence?: number,
+    ): Promise<ExecutionResult> {
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        return await execute(program, source, {
+            connectors: chargebackConnectors(aiResult, aiConfidence),
+            input,
+        });
+    }
+
+    const validInput = {
+        chargeback: {
+            dispute_id: "DSP-4892",
+            transaction_id: "TXN-7210",
+            amount: 249.99,
+            reason_code: "product_not_received",
+            customer_id: "CUST-1138",
+            filed_date: "2024-02-28",
+        },
+    };
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "chargeback-dispute.flow");
+    });
+
+    it("contests when AI recommends contest", async () => {
+        const result = await runChargeback(
+            validInput,
+            "Based on strong delivery evidence, I recommend we contest this dispute.",
+            0.85,
+        );
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["action"]).toEqual(text("contest"));
+        }
+    });
+
+    it("accepts with default mock (no contest keyword)", async () => {
+        const result = await runChargeback(
+            validInput,
+            "Based on the evidence, I recommend we accept this dispute.",
+            0.85,
+        );
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["action"]).toEqual(text("accept"));
+        }
+    });
+
+    it("escalates on low confidence", async () => {
+        const result = await runChargeback(
+            validInput,
+            "Unclear evidence, could go either way.",
+            0.4,
+        );
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["action"]).toEqual(text("escalate"));
+        }
+    });
+
+    it("gathers shipping evidence for product_not_received", async () => {
+        const result = await runChargeback(validInput);
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("Shipping evidence gathered"))).toBe(true);
+    });
+
+    it("skips shipping for other reason codes", async () => {
+        const result = await runChargeback({
+            chargeback: {
+                dispute_id: "DSP-5001",
+                transaction_id: "TXN-8000",
+                amount: 150,
+                reason_code: "fraudulent",
+                customer_id: "CUST-2000",
+                filed_date: "2024-03-01",
+            },
+        });
+        const msgs = logMessages(result);
+        expect(msgs.some(m => m.includes("not required"))).toBe(true);
+    });
+
+    it("rejects missing dispute ID", async () => {
+        const result = await runChargeback({
+            chargeback: {
+                dispute_id: "",
+                transaction_id: "TXN-7210",
+                amount: 249.99,
+                reason_code: "product_not_received",
+                customer_id: "CUST-1138",
+                filed_date: "2024-02-28",
+            },
+        });
+        expect(result.result.status).toBe("rejected");
+        if (result.result.status === "rejected") {
+            expect(result.result.message).toContain("Missing dispute ID");
+        }
+    });
+
+    it("executes all 7 steps", async () => {
+        const result = await runChargeback(validInput);
+        const stepStarts = result.log.filter(e => e.action.includes("started"));
+        const stepNames = stepStarts.map(e => e.step);
+        expect(stepNames).toContain("ValidateDispute");
+        expect(stepNames).toContain("GatherTransactionEvidence");
+        expect(stepNames).toContain("GatherShippingEvidence");
+        expect(stepNames).toContain("GatherCustomerHistory");
+        expect(stepNames).toContain("BuildResponse");
+        expect(stepNames).toContain("SubmitResponse");
+        expect(stepNames).toContain("NotifyTeam");
+    });
+});

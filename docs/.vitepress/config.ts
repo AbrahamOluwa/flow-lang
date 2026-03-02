@@ -64,6 +64,9 @@ export default defineConfig({
                     text: "Examples",
                     items: [
                         { text: "Overview", link: "/examples/" },
+                        { text: "Transaction Fraud", link: "/examples/transaction-fraud" },
+                        { text: "Payment Reconciliation", link: "/examples/payment-reconciliation" },
+                        { text: "Chargeback Dispute", link: "/examples/chargeback-dispute" },
                         { text: "Email Verification", link: "/examples/email-verification" },
                         { text: "Order Processing", link: "/examples/order-processing" },
                         { text: "GitHub Scout", link: "/examples/github-scout" },

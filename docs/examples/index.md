@@ -4,6 +4,60 @@ Real-world business rules written in Flow. Each example is a complete, runnable 
 
 ## Available examples
 
+### [Transaction Fraud](/examples/transaction-fraud)
+
+Real-time fraud decisioning that combines AI risk scoring, rule-based screening, velocity checks, and human escalation into a single workflow.
+
+```txt
+step DecisionEngine:
+    set ai-score to ai-confidence times 100 rounded to 0
+    set combined-score to rule-score plus ai-score divided by 2 rounded to 0
+
+    if combined-score is above 75:
+        set decision to "block"
+    otherwise if combined-score is above 40:
+        set decision to "review"
+    otherwise:
+        set decision to "approve"
+```
+
+### [Payment Reconciliation](/examples/payment-reconciliation)
+
+Compares ledger records against payment processor settlements. Loops through settlements to calculate running totals, detects mismatches, and uses AI to analyze discrepancies.
+
+```txt
+step CalculateTotals:
+    set settlement-total to 0
+    set settlement-count to 0
+
+    for each settlement in settlements:
+        set settlement-total to settlement-total plus settlement.amount
+        set settlement-count to settlement-count plus 1
+
+step CompareResults:
+    set total-difference to ledger-total minus settlement-total
+    if total-difference is not 0:
+        set has-mismatch to true
+```
+
+### [Chargeback Dispute](/examples/chargeback-dispute)
+
+Gathers evidence from multiple sources, asks AI for a dispute recommendation, then uses string matching to decide whether to contest or accept.
+
+```txt
+step BuildResponse:
+    ask CaseBuilder to "analyze this chargeback dispute..."
+        save the result as recommendation
+        save the confidence as recommendation-confidence
+
+    if recommendation-confidence is below 0.5:
+        set action to "escalate"
+    otherwise if recommendation contains "contest":
+        set action to "contest"
+    otherwise:
+        set action to "accept"
+```
+
 ### [Email Verification](/examples/email-verification)
 
 Validates an email address submitted through a form. Demonstrates service calls, conditionals, and completion/rejection.
