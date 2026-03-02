@@ -156,6 +156,22 @@ describe("Parser — services block", () => {
         expect(decl.target).toBe("/hooks/incoming");
     });
 
+    it("parses a database service", () => {
+        const program = pOk('services:\n    DB is a database at "./data.sqlite"');
+        const decl = program.services!.declarations[0]!;
+        expect(decl.name).toBe("DB");
+        expect(decl.serviceType).toBe("database");
+        expect(decl.target).toBe("./data.sqlite");
+    });
+
+    it("parses a database service with :memory: target", () => {
+        const program = pOk('services:\n    TestDB is a database at ":memory:"');
+        const decl = program.services!.declarations[0]!;
+        expect(decl.name).toBe("TestDB");
+        expect(decl.serviceType).toBe("database");
+        expect(decl.target).toBe(":memory:");
+    });
+
     it("parses multiple services", () => {
         const source = [
             "services:",

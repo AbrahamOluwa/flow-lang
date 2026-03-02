@@ -497,6 +497,32 @@ describe("Analyzer — service headers", () => {
         checkOk(source);
     });
 
+    it("warns about headers on database service type", () => {
+        const source = [
+            "services:",
+            '    DB is a database at "./data.sqlite"',
+            "        with headers:",
+            '            Authorization: "Bearer key"',
+            "",
+            "workflow:",
+            '    log "ok"',
+        ].join("\n");
+        checkHasWarning(source, "not supported on database services");
+    });
+
+    it("accepts a valid database service without headers", () => {
+        const source = [
+            "services:",
+            '    DB is a database at "./data.sqlite"',
+            "",
+            "workflow:",
+            '    get product using DB at "products" with id 1',
+            "        save the result as product",
+            '    log "ok"',
+        ].join("\n");
+        checkOk(source);
+    });
+
     it("warns about headers on AI service type", () => {
         const source = [
             "services:",

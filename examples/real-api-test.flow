@@ -15,7 +15,7 @@ workflow:
         log "Successfully fetched data from public API"
 
     step AskAI:
-        ask GPT to summarize what Flow is in one sentence. Flow is a domain-specific language for workflow orchestration.
+        ask GPT to summarize what Flow is in one sentence. Flow is a language for writing business rules that execute.
             save the result as summary
             save the confidence as conf
         log "AI response: {summary}"

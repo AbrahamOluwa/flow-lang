@@ -382,11 +382,15 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
                 advance();
                 serviceType = "webhook";
                 expect(TokenType.KEYWORD, "at", "after \"webhook\"");
+            } else if (typeTok.type === TokenType.IDENTIFIER && typeTok.value === "database") {
+                advance();
+                serviceType = "database";
+                expect(TokenType.KEYWORD, "at", 'after "database"');
             } else {
                 addError(typeTok,
-                    `Expected "plugin" or "webhook" after "is a", but found "${typeTok.value}".`,
+                    `Expected "plugin", "webhook", or "database" after "is a", but found "${typeTok.value}".`,
                     undefined,
-                    `Valid service types:\n    ${name} is a plugin "package-name"\n    ${name} is a webhook at "/path"`);
+                    `Valid service types:\n    ${name} is a plugin "package-name"\n    ${name} is a webhook at "/path"\n    ${name} is a database at "./path.sqlite"`);
                 skipToNextStatement();
                 return null;
             }
@@ -394,7 +398,7 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
             addError(article,
                 `Expected "an" or "a" after "is" in service declaration, but found "${article.value}".`,
                 undefined,
-                `Valid service types:\n    ${name} is an API at "https://..."\n    ${name} is an AI using "model-name"\n    ${name} is a plugin "package-name"\n    ${name} is a webhook at "/path"`);
+                `Valid service types:\n    ${name} is an API at "https://..."\n    ${name} is an AI using "model-name"\n    ${name} is a plugin "package-name"\n    ${name} is a webhook at "/path"\n    ${name} is a database at "./path.sqlite"`);
             skipToNextStatement();
             return null;
         }
@@ -405,7 +409,7 @@ export function parse(tokens: Token[], source: string, fileName: string = "<inpu
             addError(targetTok,
                 `Expected a quoted string for the service target, but found "${targetTok.value}".`,
                 'Wrap the value in double quotes.',
-                `Example: ${name} is ${serviceType === "api" ? 'an API at' : serviceType === "ai" ? 'an AI using' : serviceType === "plugin" ? 'a plugin' : 'a webhook at'} "value-here"`);
+                `Example: ${name} is ${serviceType === "api" ? 'an API at' : serviceType === "ai" ? 'an AI using' : serviceType === "plugin" ? 'a plugin' : serviceType === "database" ? 'a database at' : 'a webhook at'} "value-here"`);
             skipToNextStatement();
             return null;
         }

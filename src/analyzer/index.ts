@@ -126,7 +126,7 @@ export function analyze(program: Program, source: string, fileName: string = "<i
 
             // Validate headers
             if (decl.headers.length > 0) {
-                if (decl.serviceType === "ai" || decl.serviceType === "plugin") {
+                if (decl.serviceType === "ai" || decl.serviceType === "plugin" || decl.serviceType === "database") {
                     addWarning(decl.headers[0]!.loc,
                         `Headers are not supported on ${decl.serviceType} services. They will be ignored.`,
                         `Remove the "with headers:" block from "${decl.name}".`);

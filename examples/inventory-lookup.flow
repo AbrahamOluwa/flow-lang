@@ -1,0 +1,27 @@
+config:
+    name: "Inventory Lookup"
+    version: 1
+
+services:
+    DB is a database at "./inventory.sqlite"
+
+workflow:
+    trigger: when a stock check is requested
+
+    step CheckProduct:
+        get product using DB at "products" with id request.product-id
+            save the result as product
+
+        if product is empty:
+            reject with "Product not found"
+
+        log "Found product: {product.name}"
+
+    step EvaluateStock:
+        if product.stock is below 10:
+            log "LOW STOCK WARNING: {product.name} has only {product.stock} units"
+            complete with status "low-stock" and product-name product.name and stock product.stock
+
+        otherwise:
+            log "Stock level OK: {product.name} has {product.stock} units"
+            complete with status "in-stock" and product-name product.name and stock product.stock

@@ -6,7 +6,7 @@ import { dirname } from "path";
 import { tokenize } from "../../src/lexer/index.js";
 import { parse } from "../../src/parser/index.js";
 import { analyze } from "../../src/analyzer/index.js";
-import { execute, text, num, record, type ServiceConnector } from "../../src/runtime/index.js";
+import { execute, text, num, record, MockDatabaseConnector, type ServiceConnector } from "../../src/runtime/index.js";
 import type { ExecutionResult, FlowValue } from "../../src/types/index.js";
 
 // ============================================================
@@ -986,5 +986,92 @@ describe("Integration — chargeback-dispute.flow", () => {
         expect(stepNames).toContain("BuildResponse");
         expect(stepNames).toContain("SubmitResponse");
         expect(stepNames).toContain("NotifyTeam");
+    });
+});
+
+// ============================================================
+// Inventory Lookup (database connector)
+// ============================================================
+
+describe("Integration — inventory-lookup.flow", () => {
+    const source = readExample("inventory-lookup.flow");
+
+    it("passes flow check with zero errors", () => {
+        checkFile(source, "inventory-lookup.flow");
+    });
+
+    it("completes with in-stock status when stock is sufficient", async () => {
+        const mockDB: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({
+                        id: num(1),
+                        name: text("Widget"),
+                        stock: num(100),
+                    }),
+                };
+            },
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("DB", mockDB);
+
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        const result = await execute(program, source, {
+            connectors,
+            input: { request: { "product-id": 1 } },
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["status"]).toEqual(text("in-stock"));
+        }
+    });
+
+    it("completes with low-stock status when stock is below 10", async () => {
+        const mockDB: ServiceConnector = {
+            async call() {
+                return {
+                    value: record({
+                        id: num(2),
+                        name: text("Rare Part"),
+                        stock: num(3),
+                    }),
+                };
+            },
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("DB", mockDB);
+
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        const result = await execute(program, source, {
+            connectors,
+            input: { request: { "product-id": 2 } },
+        });
+        expect(result.result.status).toBe("completed");
+        if (result.result.status === "completed") {
+            expect(result.result.outputs["status"]).toEqual(text("low-stock"));
+        }
+    });
+
+    it("rejects when product is not found", async () => {
+        const mockDB: ServiceConnector = {
+            async call() {
+                return { value: { type: "empty" as const } };
+            },
+        };
+        const connectors = new Map<string, ServiceConnector>();
+        connectors.set("DB", mockDB);
+
+        const tokens = tokenize(source);
+        const { program } = parse(tokens, source);
+        const result = await execute(program, source, {
+            connectors,
+            input: { request: { "product-id": 999 } },
+        });
+        expect(result.result.status).toBe("rejected");
+        if (result.result.status === "rejected") {
+            expect(result.result.message).toContain("Product not found");
+        }
     });
 });

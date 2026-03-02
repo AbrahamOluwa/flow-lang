@@ -82,7 +82,7 @@ export interface ServicesBlock {
     loc: SourceLocation;
 }
 
-export type ServiceType = "api" | "ai" | "plugin" | "webhook";
+export type ServiceType = "api" | "ai" | "plugin" | "webhook" | "database";
 
 export interface ServiceHeader {
     name: string;

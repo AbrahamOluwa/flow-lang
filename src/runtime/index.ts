@@ -298,12 +298,59 @@ export class MockWebhookConnector implements ServiceConnector {
     }
 }
 
+// Database verb categories
+const DB_SELECT_SINGLE_VERBS = new Set(["get", "fetch", "find", "check"]);
+const DB_SELECT_MULTI_VERBS = new Set(["list", "search", "query"]);
+const DB_COUNT_VERBS = new Set(["count"]);
+const DB_INSERT_VERBS = new Set(["insert", "create", "add", "record", "save", "store"]);
+const DB_UPDATE_VERBS = new Set(["update", "modify", "change"]);
+const DB_DELETE_VERBS = new Set(["delete", "remove", "clear"]);
+
+export class MockDatabaseConnector implements ServiceConnector {
+    private callCount = 0;
+    private failCount: number;
+
+    constructor(options?: MockConnectorOptions) {
+        this.failCount = options?.failCount ?? 0;
+    }
+
+    async call(verb: string, description: string, _params: Map<string, FlowValue>): Promise<ServiceResponse> {
+        this.callCount++;
+        if (this.callCount <= this.failCount) {
+            throw new Error(`Database failed: ${verb} ${description} (mock failure)`);
+        }
+        const lower = verb.toLowerCase();
+        if (DB_SELECT_SINGLE_VERBS.has(lower)) {
+            return { value: record({ id: num(1), name: text("mock record") }) };
+        }
+        if (DB_SELECT_MULTI_VERBS.has(lower)) {
+            return {
+                value: list([
+                    record({ id: num(1), name: text("record 1") }),
+                    record({ id: num(2), name: text("record 2") }),
+                ]),
+            };
+        }
+        if (DB_COUNT_VERBS.has(lower)) {
+            return { value: num(42) };
+        }
+        if (DB_INSERT_VERBS.has(lower)) {
+            return { value: record({ id: num(1) }) };
+        }
+        if (DB_UPDATE_VERBS.has(lower) || DB_DELETE_VERBS.has(lower)) {
+            return { value: record({ changes: num(1) }) };
+        }
+        return { value: record({ status: text("ok") }) };
+    }
+}
+
 export function createMockConnector(serviceType: string, options?: MockConnectorOptions): ServiceConnector {
     switch (serviceType) {
         case "api": return new MockAPIConnector(options);
         case "ai": return new MockAIConnector(options);
         case "plugin": return new MockPluginConnector(options);
         case "webhook": return new MockWebhookConnector(options);
+        case "database": return new MockDatabaseConnector(options);
         default: return new MockAPIConnector(options);
     }
 }
@@ -471,6 +518,272 @@ export class PluginStubConnector implements ServiceConnector {
 }
 
 // ============================================================
+// Database Connector
+// ============================================================
+
+const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+function flowValueToSqlite(value: FlowValue): string | number | null {
+    switch (value.type) {
+        case "text": return value.value;
+        case "number": return value.value;
+        case "boolean": return value.value ? 1 : 0;
+        case "empty": return null;
+        default: return JSON.stringify(flowValueToJson(value));
+    }
+}
+
+function sqliteRowToFlowRecord(row: Record<string, unknown>): FlowRecord {
+    const map = new Map<string, FlowValue>();
+    for (const [k, v] of Object.entries(row)) {
+        if (v === null || v === undefined) {
+            map.set(k, EMPTY);
+        } else if (typeof v === "string") {
+            map.set(k, text(v));
+        } else if (typeof v === "number") {
+            map.set(k, num(v));
+        } else {
+            map.set(k, text(String(v)));
+        }
+    }
+    return { type: "record", value: map };
+}
+
+interface BetterSqliteDatabase {
+    prepare(sql: string): BetterSqliteStatement;
+    pragma(pragma: string): unknown;
+    close(): void;
+}
+
+interface BetterSqliteStatement {
+    get(...params: unknown[]): Record<string, unknown> | undefined;
+    all(...params: unknown[]): Record<string, unknown>[];
+    run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
+}
+
+export class DatabaseConnector implements ServiceConnector {
+    private dbPath: string;
+    private db: BetterSqliteDatabase | null = null;
+
+    constructor(dbPath: string) {
+        this.dbPath = dbPath;
+    }
+
+    private async ensureDb(): Promise<BetterSqliteDatabase> {
+        if (this.db) return this.db;
+
+        let BetterSqlite3: (path: string) => BetterSqliteDatabase;
+        try {
+            const mod = await import("better-sqlite3");
+            BetterSqlite3 = mod.default as unknown as (path: string) => BetterSqliteDatabase;
+        } catch {
+            throw new Error(
+                'The "better-sqlite3" package is required for database services. ' +
+                "Install it with: npm install better-sqlite3"
+            );
+        }
+
+        this.db = BetterSqlite3(this.dbPath);
+        this.db.pragma("journal_mode = WAL");
+        return this.db;
+    }
+
+    async call(verb: string, _description: string, params: Map<string, FlowValue>, path?: string): Promise<ServiceResponse> {
+        const db = await this.ensureDb();
+        const lower = verb.toLowerCase();
+
+        // SQL mode: raw query via `with query "..."` param
+        const queryParam = params.get("query");
+        if (queryParam && queryParam.type === "text") {
+            return this.executeSqlMode(db, lower, queryParam.value, params);
+        }
+
+        // Table mode: path is the table name
+        if (!path) {
+            throw new Error(
+                `Database call "${verb}" requires a table name. ` +
+                `Use: ${verb} ... using <DB> at "tablename" with ...`
+            );
+        }
+
+        const tableName = path.replace(/^\//, "");
+        if (!VALID_TABLE_NAME.test(tableName)) {
+            throw new Error(
+                `Invalid table name "${tableName}". ` +
+                "Table names must start with a letter or underscore and contain only letters, digits, and underscores."
+            );
+        }
+
+        return this.executeTableMode(db, lower, tableName, params);
+    }
+
+    private executeSqlMode(
+        db: BetterSqliteDatabase,
+        lower: string,
+        sql: string,
+        params: Map<string, FlowValue>,
+    ): ServiceResponse {
+        // Build named bindings from remaining params (exclude "query")
+        const bindings: Record<string, string | number | null> = {};
+        for (const [k, v] of params) {
+            if (k === "query") continue;
+            // Convert hyphens to underscores for SQLite bind param names
+            const bindKey = k.replace(/-/g, "_");
+            bindings[bindKey] = flowValueToSqlite(v);
+        }
+
+        const stmt = db.prepare(sql);
+        const isSelect = DB_SELECT_SINGLE_VERBS.has(lower) ||
+            DB_SELECT_MULTI_VERBS.has(lower) ||
+            DB_COUNT_VERBS.has(lower) ||
+            sql.trimStart().toUpperCase().startsWith("SELECT");
+
+        if (isSelect) {
+            if (DB_SELECT_SINGLE_VERBS.has(lower)) {
+                const row = stmt.get(bindings);
+                return { value: row ? sqliteRowToFlowRecord(row) : EMPTY };
+            }
+            if (DB_COUNT_VERBS.has(lower)) {
+                const row = stmt.get(bindings);
+                if (row) {
+                    const firstVal = Object.values(row)[0];
+                    return { value: num(Number(firstVal)) };
+                }
+                return { value: num(0) };
+            }
+            const rows = stmt.all(bindings);
+            return { value: list(rows.map(sqliteRowToFlowRecord)) };
+        }
+
+        const result = stmt.run(bindings);
+        if (DB_INSERT_VERBS.has(lower)) {
+            return { value: record({ id: num(Number(result.lastInsertRowid)) }) };
+        }
+        return { value: record({ changes: num(result.changes) }) };
+    }
+
+    private executeTableMode(
+        db: BetterSqliteDatabase,
+        lower: string,
+        tableName: string,
+        params: Map<string, FlowValue>,
+    ): ServiceResponse {
+        if (DB_SELECT_SINGLE_VERBS.has(lower)) {
+            return this.selectSingle(db, tableName, params);
+        }
+        if (DB_SELECT_MULTI_VERBS.has(lower)) {
+            return this.selectMulti(db, tableName, params);
+        }
+        if (DB_COUNT_VERBS.has(lower)) {
+            return this.countRows(db, tableName, params);
+        }
+        if (DB_INSERT_VERBS.has(lower)) {
+            return this.insertRow(db, tableName, params);
+        }
+        if (DB_UPDATE_VERBS.has(lower)) {
+            return this.updateRow(db, tableName, params);
+        }
+        if (DB_DELETE_VERBS.has(lower)) {
+            return this.deleteRows(db, tableName, params);
+        }
+
+        // Unknown verb — default to select
+        return this.selectMulti(db, tableName, params);
+    }
+
+    private buildWhereClause(params: Map<string, FlowValue>): { sql: string; bindings: Record<string, string | number | null> } {
+        const conditions: string[] = [];
+        const bindings: Record<string, string | number | null> = {};
+        for (const [k, v] of params) {
+            const bindKey = k.replace(/-/g, "_");
+            conditions.push(`"${k}" = :${bindKey}`);
+            bindings[bindKey] = flowValueToSqlite(v);
+        }
+        const sql = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
+        return { sql, bindings };
+    }
+
+    private selectSingle(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
+        const where = this.buildWhereClause(params);
+        const stmt = db.prepare(`SELECT * FROM "${table}"${where.sql} LIMIT 1`);
+        const row = stmt.get(where.bindings);
+        return { value: row ? sqliteRowToFlowRecord(row) : EMPTY };
+    }
+
+    private selectMulti(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
+        const where = this.buildWhereClause(params);
+        const stmt = db.prepare(`SELECT * FROM "${table}"${where.sql}`);
+        const rows = stmt.all(where.bindings);
+        return { value: list(rows.map(sqliteRowToFlowRecord)) };
+    }
+
+    private countRows(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
+        const where = this.buildWhereClause(params);
+        const stmt = db.prepare(`SELECT COUNT(*) as count FROM "${table}"${where.sql}`);
+        const row = stmt.get(where.bindings) as Record<string, unknown> | undefined;
+        return { value: num(Number(row?.["count"] ?? 0)) };
+    }
+
+    private insertRow(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
+        const columns: string[] = [];
+        const placeholders: string[] = [];
+        const bindings: Record<string, string | number | null> = {};
+        for (const [k, v] of params) {
+            const bindKey = k.replace(/-/g, "_");
+            columns.push(`"${k}"`);
+            placeholders.push(`:${bindKey}`);
+            bindings[bindKey] = flowValueToSqlite(v);
+        }
+        const sql = `INSERT INTO "${table}" (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`;
+        const result = db.prepare(sql).run(bindings);
+        return { value: record({ id: num(Number(result.lastInsertRowid)) }) };
+    }
+
+    private updateRow(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
+        const setClauses: string[] = [];
+        const bindings: Record<string, string | number | null> = {};
+        let idValue: string | number | null = null;
+
+        for (const [k, v] of params) {
+            const bindKey = k.replace(/-/g, "_");
+            bindings[bindKey] = flowValueToSqlite(v);
+            if (k === "id") {
+                idValue = flowValueToSqlite(v);
+            } else {
+                setClauses.push(`"${k}" = :${bindKey}`);
+            }
+        }
+
+        if (idValue === null) {
+            throw new Error(
+                'UPDATE requires an "id" parameter for the WHERE clause. ' +
+                "For updates with a different primary key, use SQL mode with the query parameter."
+            );
+        }
+        if (setClauses.length === 0) {
+            throw new Error("UPDATE requires at least one field to set besides id.");
+        }
+
+        const sql = `UPDATE "${table}" SET ${setClauses.join(", ")} WHERE "id" = :id`;
+        const result = db.prepare(sql).run(bindings);
+        return { value: record({ changes: num(result.changes) }) };
+    }
+
+    private deleteRows(db: BetterSqliteDatabase, table: string, params: Map<string, FlowValue>): ServiceResponse {
+        const where = this.buildWhereClause(params);
+        if (where.sql === "") {
+            throw new Error(
+                "DELETE requires at least one parameter for the WHERE clause. " +
+                "To delete all rows, use SQL mode with the query parameter."
+            );
+        }
+        const sql = `DELETE FROM "${table}"${where.sql}`;
+        const result = db.prepare(sql).run(where.bindings);
+        return { value: record({ changes: num(result.changes) }) };
+    }
+}
+
+// ============================================================
 // AI Connectors
 // ============================================================
 
@@ -606,6 +919,9 @@ export function buildConnectors(
                 } else {
                     connectors.set(decl.name, createMockConnector("ai"));
                 }
+                break;
+            case "database":
+                connectors.set(decl.name, new DatabaseConnector(decl.target));
                 break;
         }
     }

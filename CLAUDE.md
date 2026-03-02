@@ -29,8 +29,9 @@
 | 13. Docs Site | Complete | — | VitePress + GitHub Pages |
 | Online Playground | Complete | — | Browser-based editor + interpreter, Monaco, Vite, GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
+| 18. Database Connector | Complete | 20 | SQLite via better-sqlite3, table mode + SQL mode, verb mapping |
 
-**Tests passing: 468 (phases 1–17 + input-file + logging)**
+**Tests passing: 519 (phases 1–18 + input-file + logging)**
 
 ## Decisions Log
 
@@ -70,10 +71,15 @@ Decisions made during implementation that weren't in the original brief:
 32. **`durationMs` on log entries** — `LogEntry` has a `durationMs: number | null` field. Service calls, ask statements, and step "completed" entries track wall-clock time via `performance.now()`. Log statements and step "started" entries have `null` duration.
 33. **`--output-log <path>` CLI flag** — `flow run` and `flow test` accept `--output-log` to write a structured JSON log file. The `StructuredLog` envelope contains workflow metadata, total duration, outputs/error, and serialized log entries with ISO timestamps.
 34. **VS Code extension in `flow-vscode/`** — Self-contained extension directory with TextMate grammar, 8 snippets, and language config. Packages to `.vsix` via `@vscode/vsce`. No dependency on the main project build.
+35. **`database` service type** — `MyDB is a database at "./path.sqlite"` uses `better-sqlite3` with dynamic import (same pattern as AI SDKs). Supports both table mode (`at "tablename"`) and SQL mode (`with query "SELECT ..."`).
+36. **Database verb-to-operation mapping** — get/fetch/find/check→SELECT single, list/search/query→SELECT multi, count→COUNT, insert/create/add/record/save/store→INSERT, update/modify/change→UPDATE, delete/remove/clear→DELETE. Unknown verbs default to SELECT multi.
+37. **Database UPDATE convention** — The `id` parameter is used for the WHERE clause, all other params go to SET. Users with non-`id` primary keys use SQL mode with raw queries.
+38. **SQL injection prevention** — Table names validated with `/^[a-zA-Z_][a-zA-Z0-9_]*$/`. Column names double-quoted. Params use SQLite named bindings (`:name` syntax), never string concatenation.
+39. **Hyphenated params to SQL bindings** — Flow identifiers like `product-id` are converted to `product_id` for SQLite bind param names (`:name` syntax doesn't support hyphens). Column names in generated SQL use the original form with double quotes.
 
 ## What This Is
 
-Flow is a domain-specific programming language for AI agent and workflow orchestration. It lets non-engineers write automated workflows in structured English that execute deterministically. The interpreter is built in TypeScript.
+Flow is a language for writing business rules that execute — readable, versioned, and auditable. It lets non-engineers write automated workflows in structured English that execute deterministically. The interpreter is built in TypeScript.
 
 **Core principle:** "If you can write a process document, you can write a Flow program."
 
@@ -107,13 +113,13 @@ src/
   errors/         # Error formatting and suggestions
 tests/
   lexer/          # 100 tests
-  parser/         # 75 tests
-  analyzer/       # 45 tests
-  runtime/        # 167 tests
+  parser/         # 77 tests
+  analyzer/       # 47 tests
+  runtime/        # 187 tests (includes 20 database connector tests)
   server/         # 18 tests — webhook server (supertest)
   errors/         # 14 tests
-  integration/    # 19 tests — end-to-end .flow file tests
-examples/         # Four .flow files (email-verification, order-processing, loan-application, github-api)
+  integration/    # 53 tests — end-to-end .flow file tests
+examples/         # .flow files (email-verification, order-processing, loan-application, github-api, inventory-lookup)
 ```
 
 ## Key Architecture Notes
@@ -130,7 +136,7 @@ interface ServiceConnector {
     call(verb: string, description: string, params: Map<string, FlowValue>, path?: string, headers?: Record<string, string>): Promise<ServiceResponse>;
 }
 ```
-All service interactions (API, AI, plugin, webhook) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector`, `AnthropicConnector`, `OpenAIConnector` (for real execution).
+All service interactions (API, AI, plugin, webhook, database) go through this interface. Implementations: `MockAPIConnector`, `MockAIConnector`, `MockPluginConnector`, `MockWebhookConnector`, `MockDatabaseConnector` (for testing), `HTTPAPIConnector`, `WebhookConnector`, `PluginStubConnector`, `AnthropicConnector`, `OpenAIConnector`, `DatabaseConnector` (for real execution).
 
 ### RuntimeOptions (extension point for connectors)
 ```typescript
@@ -199,8 +205,10 @@ services:
         with headers:
             Authorization: "Bearer {env.API_KEY}"
             Accept: "application/json"
+    MyDB is a database at "./data.sqlite"
 ```
-Headers are optional. Values support string interpolation for env vars. Only `api` and `webhook` types support headers.
+Headers are optional. Values support string interpolation for env vars. Only `api` and `webhook` types support headers. Database services use `better-sqlite3` and support table mode (`at "tablename"`) and SQL mode (`with query "SELECT ..."`).
+
 
 ### 7 Constructs (no more)
 1. **Steps:** `<verb> <description> using <Service> [at <path>] [with <params>]`
