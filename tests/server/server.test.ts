@@ -317,3 +317,62 @@ workflow:
         }
     });
 });
+
+// ============================================================
+// Auth middleware
+// ============================================================
+
+describe("Server — Auth middleware", () => {
+    const source = `
+workflow:
+    complete with status "ok"
+`;
+
+    function buildAuthApp(authToken?: string): Application {
+        const workflow = buildWorkflow(source);
+        return createApp(
+            new Map([["", workflow]]),
+            { ...defaultOptions, authToken },
+        );
+    }
+
+    it("rejects requests without auth header when token is set", async () => {
+        const app = buildAuthApp("secret-123");
+        const res = await request(app).post("/").send({});
+        expect(res.status).toBe(401);
+        expect(res.body.error).toBe("Unauthorized");
+    });
+
+    it("rejects requests with wrong token", async () => {
+        const app = buildAuthApp("secret-123");
+        const res = await request(app)
+            .post("/")
+            .set("Authorization", "Bearer wrong-token")
+            .send({});
+        expect(res.status).toBe(401);
+    });
+
+    it("allows requests with correct token", async () => {
+        const app = buildAuthApp("secret-123");
+        const res = await request(app)
+            .post("/")
+            .set("Authorization", "Bearer secret-123")
+            .send({});
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("completed");
+    });
+
+    it("health check bypasses auth", async () => {
+        const app = buildAuthApp("secret-123");
+        const res = await request(app).get("/health");
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("ok");
+    });
+
+    it("allows all requests when no token is configured", async () => {
+        const app = buildAuthApp(undefined);
+        const res = await request(app).post("/").send({});
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe("completed");
+    });
+});

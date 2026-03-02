@@ -29,6 +29,7 @@ export interface ServeOptions {
     port: number;
     verbose: boolean;
     mock: boolean;
+    authToken?: string;
 }
 
 // ============================================================
@@ -166,10 +167,23 @@ export function createApp(
     const app = express();
     app.use(express.json());
 
-    // Health check
+    // Health check (always public, before auth)
     app.get("/health", (_req: Request, res: Response) => {
         res.json({ status: "ok" });
     });
+
+    // Auth middleware
+    if (options.authToken) {
+        const token = options.authToken;
+        app.use((req: Request, res: Response, next: () => void) => {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || authHeader !== `Bearer ${token}`) {
+                res.status(401).json({ error: "Unauthorized", hint: 'Provide a valid "Authorization: Bearer <token>" header.' });
+                return;
+            }
+            next();
+        });
+    }
 
     const isSingleFile = workflows.size === 1 && workflows.has("");
 
@@ -255,6 +269,9 @@ export function startServer(target: string, options: ServeOptions): void {
         for (const [route, wf] of workflows) {
             const path = route === "" ? "/" : `/${route}`;
             console.log(`  ${chalk.cyan(path)} -> ${wf.name}`);
+        }
+        if (options.authToken) {
+            console.log(chalk.yellow(`\nAuth enabled — requests require: Authorization: Bearer <token>`));
         }
         console.log(chalk.gray(`\nHealth check: GET http://localhost:${options.port}/health`));
     });

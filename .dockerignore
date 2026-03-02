@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env
+*.sqlite
+tests
+docs
+playground
+flow-vscode
+.claude
+*.md
+!README.md

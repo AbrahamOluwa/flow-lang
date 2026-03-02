@@ -30,8 +30,9 @@
 | Online Playground | Complete | — | Browser-based editor + interpreter, Monaco, Vite, GitHub Pages |
 | 14. Hosted Runtime | Planned (deferred) | TBD | Only if validated |
 | 18. Database Connector | Complete | 20 | SQLite via better-sqlite3, table mode + SQL mode, verb mapping |
+| 19. Production Hardening | Complete | 5 | `--auth-token` middleware, Dockerfile, `.dockerignore` |
 
-**Tests passing: 519 (phases 1–18 + input-file + logging)**
+**Tests passing: 524 (phases 1–19 + input-file + logging)**
 
 ## Decisions Log
 
@@ -76,6 +77,8 @@ Decisions made during implementation that weren't in the original brief:
 37. **Database UPDATE convention** — The `id` parameter is used for the WHERE clause, all other params go to SET. Users with non-`id` primary keys use SQL mode with raw queries.
 38. **SQL injection prevention** — Table names validated with `/^[a-zA-Z_][a-zA-Z0-9_]*$/`. Column names double-quoted. Params use SQLite named bindings (`:name` syntax), never string concatenation.
 39. **Hyphenated params to SQL bindings** — Flow identifiers like `product-id` are converted to `product_id` for SQLite bind param names (`:name` syntax doesn't support hyphens). Column names in generated SQL use the original form with double quotes.
+40. **`--auth-token` on `flow serve`** — Optional Bearer token auth middleware. Health check (`GET /health`) is always public. Token can also be set via `FLOW_AUTH_TOKEN` env var. When enabled, all workflow endpoints require `Authorization: Bearer <token>`.
+41. **Dockerfile uses multi-stage build** — Build stage compiles TypeScript, production stage copies only `dist/` and production `node_modules`. Entrypoint is `flow serve /workflows` — mount `.flow` files into `/workflows`. Native deps (better-sqlite3) require build tools installed in production stage.
 
 ## What This Is
 
@@ -96,7 +99,7 @@ npm run lint         # Lint the codebase
 flow check <file>    # Parse and analyze a .flow file
 flow run <file>      # Execute a .flow file (--input <json>, --input-file <path>, --verbose, --strict-env, --mock, --output-log <path>)
 flow test <file>     # Dry-run with mock services (--dry-run, --verbose, --output-log <path>)
-flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock)
+flow serve <target>  # Start HTTP server for webhooks (--port, --verbose, --mock, --auth-token)
 ```
 
 ## Project Structure
@@ -116,7 +119,7 @@ tests/
   parser/         # 77 tests
   analyzer/       # 47 tests
   runtime/        # 187 tests (includes 20 database connector tests)
-  server/         # 18 tests — webhook server (supertest)
+  server/         # 23 tests — webhook server + auth (supertest)
   errors/         # 14 tests
   integration/    # 53 tests — end-to-end .flow file tests
 examples/         # .flow files (email-verification, order-processing, loan-application, github-api, inventory-lookup)

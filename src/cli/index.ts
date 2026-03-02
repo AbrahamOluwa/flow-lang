@@ -396,11 +396,13 @@ program
     .option("--port <number>", "Port to listen on", "3000")
     .option("--verbose", "Log each request")
     .option("--mock", "Use mock services instead of real connectors")
-    .action((target: string, options: { port: string; verbose?: boolean; mock?: boolean }) => {
+    .option("--auth-token <token>", "Require Bearer token for all requests (health check excluded)")
+    .action((target: string, options: { port: string; verbose?: boolean; mock?: boolean; authToken?: string }) => {
         startServer(target, {
             port: parseInt(options.port, 10),
             verbose: options.verbose ?? false,
             mock: options.mock ?? false,
+            authToken: options.authToken ?? process.env.FLOW_AUTH_TOKEN,
         });
     });
 
