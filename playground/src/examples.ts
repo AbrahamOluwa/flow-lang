@@ -1,12 +1,7 @@
 import fraudCode from "../transaction-fraud.flow?raw";
 import reconciliationCode from "../payment-reconciliation.flow?raw";
 import chargebackCode from "../chargeback-dispute.flow?raw";
-import helloCode from "../hello.flow?raw";
 import discountCode from "../discount.flow?raw";
-import healthCode from "../health-check.flow?raw";
-import githubCode from "../github-lookup.flow?raw";
-import weatherCode from "../weather-alert.flow?raw";
-import cryptoCode from "../crypto-portfolio.flow?raw";
 import typoCode from "../typo.flow?raw";
 import inventoryCode from "../inventory-lookup.flow?raw";
 import customerDbCode from "../customer-db.flow?raw";
@@ -40,40 +35,10 @@ export const EXAMPLES: Example[] = [
         input: '{ "chargeback": { "dispute_id": "DSP-4892", "transaction_id": "TXN-7210", "amount": 249.99, "reason_code": "product_not_received", "customer_id": "CUST-1138", "filed_date": "2024-02-28" } }',
     },
     {
-        name: "GitHub User Lookup",
-        description: "GitHub API, conditionals on response data",
-        code: githubCode,
-        input: '{ "username": "octocat", "repos": 42, "followers": 12500 }',
-    },
-    {
-        name: "Hello World",
-        description: "Simple greeting with string interpolation",
-        code: helloCode,
-        input: '{ "name": "World" }',
-    },
-    {
         name: "Discount Calculator",
-        description: "Conditionals, math, and named steps",
+        description: "Tier-based pricing rules with conditional discounts",
         code: discountCode,
         input: '{ "total": 100, "tier": "gold" }',
-    },
-    {
-        name: "Health Check",
-        description: "No input needed — fetches from APIs and processes responses",
-        code: healthCode,
-        input: "{}",
-    },
-    {
-        name: "Weather Alert",
-        description: "Multi-service workflow with Slack notifications",
-        code: weatherCode,
-        input: '{ "city": "Lagos", "temp": 38, "condition": "clear", "threshold": 35 }',
-    },
-    {
-        name: "Crypto Portfolio",
-        description: "Loops, running totals, CoinGecko API",
-        code: cryptoCode,
-        input: '{ "coins": [{ "name": "bitcoin", "amount": 0.5, "price": 97000 }, { "name": "ethereum", "amount": 10, "price": 3200 }, { "name": "solana", "amount": 100, "price": 145 }] }',
     },
     {
         name: "Inventory Lookup",

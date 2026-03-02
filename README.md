@@ -2,7 +2,7 @@
 
 **Business rules that run, not rot.**
 
-Flow is a language for writing business logic as plain text that executes. A `.flow` file is simultaneously a process document anyone can read, an executable program, a versioned artifact, and an audit trail. One file. No drift between what the rule says and what the code does.
+Flow is a governance language for business decisions. A `.flow` file is simultaneously a policy document that compliance can read, an executable program that runs in production, and a versioned audit trail. When a regulator asks "prove how this decision is made," you hand them the file.
 
 ```
 services:
@@ -38,18 +38,18 @@ workflow:
     complete with decision decision and score combined-score
 ```
 
-This file **is** the rule. It runs. It's versioned. Anyone on the team can read it.
+This file **is** the rule. It runs. It's versioned. A compliance officer can read it. An auditor can verify it. An ops lead can change it in a pull request.
 
 ## Why Flow exists
 
-In most organizations, business logic lives in too many places. The process doc says one thing. The code says another. A Slack thread from last quarter clarified an edge case that never made it into either.
+Business decisions in regulated industries — fraud detection, KYC, claims processing, lending — need to be **provable**. Regulators ask how decisions are made. Auditors need to verify the rules match the documentation. Compliance teams need to read the actual logic, not a summary written after the fact.
 
-Every change goes through engineering. "Raise the fraud threshold from 5000 to 10000" becomes a Jira ticket, a sprint, and a deploy — for a one-line change.
+In most organizations, that logic is scattered: a process doc says one thing, the code says another, and a Slack thread from last quarter clarified an edge case that never made it into either. When something goes wrong, nobody can point to one source of truth.
 
-Flow eliminates this gap:
-- **Operations teams** write and maintain `.flow` files. When a rule changes, they change the file and submit a PR.
-- **Engineers** set up the services and infrastructure, then review PRs. They stop being bottlenecked by business logic changes.
-- **Compliance** can read the actual rules. Hand them the file — it reads like structured English.
+Flow eliminates this gap. The rule and the documentation are the same artifact:
+- **Operations teams** write and maintain `.flow` files. When a policy changes, they change the file and submit a PR — one line, reviewed, merged.
+- **Engineers** set up the services and infrastructure, then review PRs. They stop being bottlenecked by every business logic change.
+- **Compliance and auditors** read the actual rules. Hand them the `.flow` file — it reads like structured English. Try handing them 400 lines of Python.
 
 ## Installation
 
@@ -300,14 +300,12 @@ Each execution writes a timestamped JSON log when `--output-log` points to a dir
   (text)    (tokens)   (AST)  (validated)  (result)
 ```
 
-TypeScript implementation. Each stage is independent and testable in isolation.
+TypeScript. Each stage is independent and testable in isolation. 571 tests. No `any` types.
 
 - **Lexer** — Tokenizes source text with Python-style INDENT/DEDENT, string interpolation, and compound keyword matching
 - **Parser** — Recursive descent, produces a typed AST for all 7 constructs
 - **Analyzer** — Static checks before execution: service resolution, variable def-before-use, scope validation, duplicate detection
 - **Runtime** — Async tree-walking interpreter with real HTTP calls, AI SDK integration, retry with actual delays, and structured logging
-
-571 tests across all stages. No `any` types. Vitest.
 
 ## Error messages
 
@@ -332,29 +330,25 @@ We'd rather be upfront:
 - **No pause/resume** — workflows run start to finish
 - **No while loops** — only `for each` over lists
 - **No imports** — each `.flow` file is self-contained
-- **No persistent state** — Flow doesn't store data between runs
 - **No custom functions** — what you see is what runs
 
-Some of these are on the roadmap. Some are deliberate constraints.
+Some of these are on the roadmap. Some are deliberate constraints that keep Flow auditable.
 
 ## Examples
 
-The [`examples/`](examples/) directory has complete workflows:
+The [`examples/`](examples/) directory has production-style workflows for regulated industries:
 
-- **transaction-fraud.flow** — Real-time fraud detection with AI risk scoring and human escalation
+- **transaction-fraud.flow** — AI risk scoring, rule-based screening, human escalation
 - **payment-reconciliation.flow** — Batch reconciliation with loop totals and AI discrepancy analysis
 - **chargeback-dispute.flow** — Evidence gathering, AI recommendation, and dispute submission
-- **email-verification.flow** — Email validation with conditionals
-- **order-processing.flow** — Inventory, payment, AI confirmation
-- **github-scout.flow** — GitHub API with popularity scoring
-- **stripe-checkout.flow** — Stripe payments with retry and Slack notification
-- **slack-notification.flow** — Deployment notifications
-- **sendgrid-email.flow** — Transactional email with status verification
-- **inventory-lookup.flow** — SQLite database queries with stock checks
-- **loan-application.flow** — Full pipeline: credit, risk, fraud, approval
+- **loan-application.flow** — Full pipeline: credit check, risk assessment, fraud screening, approval
 - **customer-db.flow** — PostgreSQL customer lookup with loyalty tier classification
 - **daily-sales-report.flow** — Scheduled daily sales aggregation with Slack notification
 - **sla-monitor.flow** — Scheduled service health checks with PagerDuty alerting
+- **inventory-lookup.flow** — Database queries with stock level checks
+- **stripe-checkout.flow** — Stripe payments with retry and Slack notification
+
+[Try them in the browser](https://abrahamoluwa.github.io/flow-lang/playground/) — no install required.
 
 ## Documentation
 
