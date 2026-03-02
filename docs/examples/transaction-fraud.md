@@ -1,0 +1,222 @@
+# Transaction Fraud Detection
+
+Real-time fraud decisioning with AI-assisted risk scoring, rule-based screening, and human review escalation.
+
+## Full source
+
+```txt
+# Transaction Fraud Detection
+# Real-time fraud decisioning with AI-assisted risk scoring,
+# rule-based screening, and human review escalation.
+
+config:
+    name: "Transaction Fraud Detection"
+    version: 1
+    description: "Real-time fraud decisioning with AI risk scoring and human escalation"
+    timeout: 5 minutes
+
+services:
+    TransactionDB is an API at "https://transactions.example.com/api"
+    VelocityCheck is an API at "https://velocity.example.com/api"
+        with headers:
+            Authorization: "Bearer {env.VELOCITY_API_KEY}"
+    RiskScorer is an AI using "anthropic/claude-sonnet-4-20250514"
+    FraudOps is a webhook at "https://hooks.slack.com/services/fraud-ops"
+    AuditTrail is a webhook at "https://audit.example.com/fraud-events"
+
+workflow:
+    trigger: when a transaction is submitted for authorization
+
+    set transaction-id to transaction.id
+    set amount to transaction.amount
+    set merchant to transaction.merchant
+    set merchant-category to transaction.merchant_category
+    set card-present to transaction.card_present
+    set customer-id to transaction.customer_id
+    set country to transaction.country
+    log "Fraud check started for transaction {transaction-id}, amount: {amount}"
+
+    # --------------------------------------------------------
+    # Step 1: Validate required fields
+    # --------------------------------------------------------
+    step ValidateTransaction:
+        if transaction-id is empty:
+            reject with "Missing transaction ID"
+        if amount is empty:
+            reject with "Missing transaction amount"
+        if merchant is empty:
+            reject with "Missing merchant information"
+        log "Transaction validated: {merchant}, {amount}"
+
+    # --------------------------------------------------------
+    # Step 2: Velocity check — how many transactions recently?
+    # --------------------------------------------------------
+    step VelocityScreen:
+        check velocity using VelocityCheck with customer customer-id
+            save the result as velocity
+            on failure:
+                retry 2 times waiting 3 seconds
+                if still failing:
+                    log "Velocity service unavailable, proceeding with caution"
+                    set velocity-flag to "unavailable"
+
+        set hourly-count to velocity.transactions_last_hour
+        set daily-count to velocity.transactions_last_day
+
+        if hourly-count is above 10:
+            set velocity-flag to "critical"
+            log "CRITICAL: {hourly-count} transactions in last hour for customer {customer-id}"
+        otherwise if hourly-count is above 5:
+            set velocity-flag to "elevated"
+            log "Elevated velocity: {hourly-count} transactions in last hour"
+        otherwise:
+            set velocity-flag to "normal"
+
+    # --------------------------------------------------------
+    # Step 3: Rule-based screening — hard rules first
+    # --------------------------------------------------------
+    step RuleBasedScreening:
+        set rule-score to 0
+
+        # High-value transaction check
+        if amount is above 10000:
+            set rule-score to rule-score plus 40
+            log "High-value flag: amount {amount} exceeds 10000"
+        otherwise if amount is above 5000:
+            set rule-score to rule-score plus 20
+
+        # High-risk merchant category
+        if merchant-category is "gambling":
+            set rule-score to rule-score plus 30
+            log "High-risk category: {merchant-category}"
+        otherwise if merchant-category is "crypto_exchange":
+            set rule-score to rule-score plus 25
+            log "High-risk category: {merchant-category}"
+
+        # Card-not-present for high amounts
+        if card-present is false:
+            if amount is above 2000:
+                set rule-score to rule-score plus 20
+                log "Card-not-present flag for amount {amount}"
+
+        # Geographic anomaly
+        if country is not "US":
+            set rule-score to rule-score plus 15
+            log "Cross-border transaction: {country}"
+
+        # Velocity multiplier
+        if velocity-flag is "critical":
+            set rule-score to rule-score plus 30
+        otherwise if velocity-flag is "elevated":
+            set rule-score to rule-score plus 15
+
+        log "Rule-based score: {rule-score}"
+
+    # --------------------------------------------------------
+    # Step 4: AI risk assessment — pattern analysis
+    # --------------------------------------------------------
+    step AIRiskAssessment:
+        ask RiskScorer to "analyze this transaction for fraud patterns considering the amount, merchant category, velocity, and geographic data"
+            save the result as ai-assessment
+            save the confidence as ai-confidence
+
+        log "AI risk assessment complete, confidence: {ai-confidence}"
+
+        if ai-confidence is below 0.5:
+            log "Low AI confidence, requesting second analysis"
+            ask RiskScorer to "Provide a more detailed fraud risk analysis with specific risk factors"
+                save the result as second-assessment
+                save the confidence as ai-confidence
+            log "Second analysis confidence: {ai-confidence}"
+
+    # --------------------------------------------------------
+    # Step 5: Decision engine — combine scores into final decision
+    # --------------------------------------------------------
+    step DecisionEngine:
+        set ai-score to ai-confidence times 100 rounded to 0
+        set combined-score to rule-score plus ai-score divided by 2 rounded to 0
+        log "Combined risk score: {combined-score} (rules: {rule-score}, AI: {ai-score})"
+
+        if combined-score is above 75:
+            set decision to "block"
+            set reason to "High risk score exceeded threshold"
+            log "BLOCKED: Transaction {transaction-id} — score {combined-score}"
+        otherwise if combined-score is above 40:
+            set decision to "review"
+            set reason to "Moderate risk — flagged for human review"
+            log "FLAGGED: Transaction {transaction-id} — score {combined-score}"
+        otherwise:
+            set decision to "approve"
+            set reason to "Risk within acceptable range"
+            log "APPROVED: Transaction {transaction-id} — score {combined-score}"
+
+    # --------------------------------------------------------
+    # Step 6: Human escalation — notify fraud ops if flagged
+    # --------------------------------------------------------
+    step Escalation:
+        if decision is "review":
+            notify fraud team using FraudOps with transaction transaction-id and amount amount and merchant merchant and score combined-score and reason reason
+                on failure:
+                    retry 1 times waiting 5 seconds
+                    if still failing:
+                        log "WARNING: Could not notify fraud ops team"
+            log "Fraud ops notified for manual review"
+
+        if decision is "block":
+            notify fraud team using FraudOps with transaction transaction-id and amount amount and merchant merchant and score combined-score and reason "BLOCKED — immediate review required"
+            log "Fraud ops notified of blocked transaction"
+
+    # --------------------------------------------------------
+    # Step 7: Audit trail — record everything
+    # --------------------------------------------------------
+    step RecordAudit:
+        record decision using AuditTrail with transaction transaction-id and decision decision and score combined-score and rule-score rule-score and ai-confidence ai-confidence and reason reason
+        log "Audit trail recorded for transaction {transaction-id}"
+
+    complete with decision decision and transaction transaction-id and score combined-score and reason reason
+```
+
+## What this does
+
+1. **Validates the transaction** — checks that required fields (ID, amount, merchant) are present
+2. **Checks transaction velocity** — queries how many recent transactions the customer has, flagging unusual frequency
+3. **Runs rule-based screening** — scores the transaction on amount thresholds, merchant category risk, card-not-present status, and geographic anomalies
+4. **Requests AI risk assessment** — asks Claude to analyze the transaction for fraud patterns, with automatic retry if confidence is low
+5. **Combines scores into a decision** — merges the rule-based score and AI confidence into a single risk score, then decides: approve, review, or block
+6. **Escalates to fraud ops** — notifies the team via webhook for flagged or blocked transactions
+7. **Records an audit trail** — logs the final decision with all scoring details for compliance
+
+## Concepts demonstrated
+
+- **AI risk scoring** — `ask RiskScorer to "analyze this transaction..."` with `save the confidence as`
+- **Rule-based screening** — cumulative scoring with `set rule-score to rule-score plus 40`
+- **Confidence thresholds** — automatic second analysis when `ai-confidence is below 0.5`
+- **Multi-factor decision engine** — combining rule scores and AI confidence into a weighted average
+- **Webhook escalation** — notifying fraud ops with retry on failure
+- **Audit trail** — recording decisions with full context for compliance
+- **Authenticated headers** — `with headers:` block with env var interpolation on VelocityCheck
+- **Input validation** — early rejection for missing required fields
+
+## Running it
+
+```bash
+# Test with mock services (no API keys needed)
+flow run examples/transaction-fraud.flow --mock \
+  --input '{"transaction": {"id": "TXN-100", "amount": 8500, "merchant": "Online Store", "merchant_category": "retail", "card_present": false, "customer_id": "CUST-42", "country": "US"}}'
+
+# Run with real services (requires env vars)
+export ANTHROPIC_API_KEY=sk-ant-...
+export VELOCITY_API_KEY=vel_...
+flow run examples/transaction-fraud.flow \
+  --input '{"transaction": {"id": "TXN-100", "amount": 8500, "merchant": "Online Store", "merchant_category": "retail", "card_present": false, "customer_id": "CUST-42", "country": "US"}}'
+```
+
+## As a webhook
+
+```bash
+flow serve examples/transaction-fraud.flow --mock
+
+curl -X POST http://localhost:3000 \
+  -H "Content-Type: application/json" \
+  -d '{"transaction": {"id": "TXN-100", "amount": 8500, "merchant": "Online Store", "merchant_category": "retail", "card_present": false, "customer_id": "CUST-42", "country": "US"}}'
+```
